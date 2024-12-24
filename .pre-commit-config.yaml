@@ -85,7 +85,7 @@ repos:
           - --strict
           - --show-error-codes
         additional_dependencies:
-          - pydantic==2.9.2
+          - pydantic==2.10.4
           - wg-utilities==5.15.4
           - youtube-dl-nightly==2024.8.7
           - Pillow==10.4.0
