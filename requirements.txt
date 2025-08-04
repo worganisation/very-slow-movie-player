@@ -1,9 +1,9 @@
 annotated-types==0.7.0 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53 \
     --hash=sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89
-anyio==4.10.0 ; python_version >= "3.12" and python_version < "3.13" \
-    --hash=sha256:3f3fae35c96039744587aa5b8371e7e8e603c0702999535961dd336026973ba6 \
-    --hash=sha256:60e474ac86736bbfd6f210f7a61218939c318f43f9972497381f1c5e930ed3d1
+anyio==4.4.0 ; python_version >= "3.12" and python_version < "3.13" \
+    --hash=sha256:5aadc6a1bbb7cdb0bede386cac5e2940f5e2ff3aa20277e991cf028e0585ce94 \
+    --hash=sha256:c1b2d8f46a8a812513012e1107cb0e68c17159a7a594208005a57dc776e1bdc7
 blinker==1.8.2 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:1779309f71bf239144b9399d06ae925637cf6634cf6bd131104184531bf67c01 \
     --hash=sha256:8f77b09d3bf7c795e969e9486f39c2c5e9c39d4ee07424be2bc594ece9642d83
