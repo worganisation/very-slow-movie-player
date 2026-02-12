@@ -369,9 +369,9 @@ pydantic-core==2.23.4 ; python_version >= "3.12" and python_version < "3.13" \
 pydantic==2.9.2 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:d155cef71265d1e9807ed1c32b4c8deec042a44a50a4188b25ac67ecd81a9c0f \
     --hash=sha256:f048cec7b26778210e28a0459867920654d48e5e62db0958433636cde4254f12
-pyjwt==2.11.0 ; python_version >= "3.12" and python_version < "3.13" \
-    --hash=sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623 \
-    --hash=sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469
+pyjwt==2.8.0 ; python_version >= "3.12" and python_version < "3.13" \
+    --hash=sha256:57e28d156e3d5c10088e0c68abb90bfac3df82b40a71bd0daa20c65ccd5c23de \
+    --hash=sha256:59127c392cc44c2da5bb3192169a91f429924e17aff6534d70fdc02ab3e04320
 requests==2.32.3 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760 \
     --hash=sha256:70761cfe03c773ceb22aa2f671b4757976145175cdfca038c02654d061d6dcc6
