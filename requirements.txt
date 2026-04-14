@@ -403,8 +403,8 @@ urllib3==2.2.2 ; python_version >= "3.12" and python_version < "3.13" \
 werkzeug==3.0.3 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:097e5bfda9f0aba8da6b8545146def481d06aa7d3266e7448e2cccf67dd8bd18 \
     --hash=sha256:fc9645dc43e03e4d630d23143a04a7f947a9a3b5727cd535fdfe155a17cc48c8
-wg-utilities[clients,devices-epd,exceptions]==5.17.4 ; python_version >= "3.12" and python_version < "3.13" \
-    --hash=sha256:0678ef7e9d80fdf29fa77c28f8a5a1507a38f6bd70de9cd2b6025b1dad9bf896 \
-    --hash=sha256:6ebb0422614e035428da0b65eb0b461aad71552d880f6df948bbe9ebedbd115f
+wg-utilities[clients,devices-epd,exceptions]==5.15.4 ; python_version >= "3.12" and python_version < "3.13" \
+    --hash=sha256:74a0a3e273fa02696e5ad9984d805d4c16f603d19d592c6e75e93fc55a1a4290 \
+    --hash=sha256:c1d415ef3acc9df94452a10513bdd599d45292b5399b7c9c8b607d86806517d5
 youtube-dl-nightly==2024.8.7 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:750cef816dbea2c46848d836f4c4ffa771f2b8d7a159a7055ba5bfa0984cdeca
