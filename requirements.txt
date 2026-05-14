@@ -372,9 +372,9 @@ pydantic==2.9.2 ; python_version >= "3.12" and python_version < "3.13" \
 pyjwt==2.8.0 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:57e28d156e3d5c10088e0c68abb90bfac3df82b40a71bd0daa20c65ccd5c23de \
     --hash=sha256:59127c392cc44c2da5bb3192169a91f429924e17aff6534d70fdc02ab3e04320
-requests==2.34.1 ; python_version >= "3.12" and python_version < "3.13" \
-    --hash=sha256:0fc5669f2b69704449fe1552360bd2a73a54512dfd03e65529157f1513322beb \
-    --hash=sha256:bf38a3ff993960d3dd819c08862c40b3c703306eb7c744fcd9f4ddbb95b548f0
+requests==2.32.3 ; python_version >= "3.12" and python_version < "3.13" \
+    --hash=sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760 \
+    --hash=sha256:70761cfe03c773ceb22aa2f671b4757976145175cdfca038c02654d061d6dcc6
 rpi-gpio==0.7.1 ; python_version >= "3.12" and python_version < "3.13" and sys_platform == "linux" \
     --hash=sha256:15311d3b063b71dee738cd26570effc9985a952454d162937c34e08c0fc99902 \
     --hash=sha256:29226823da8b5ccb9001d795a944f2e00924eeae583490f0bc7317581172c624 \
