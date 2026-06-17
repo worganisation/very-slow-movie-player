@@ -394,9 +394,9 @@ typing-extensions==4.12.2 ; python_version >= "3.12" and python_version < "3.13"
 tzdata==2024.1 ; python_version >= "3.12" and python_version < "3.13" and platform_system == "Windows" \
     --hash=sha256:2674120f8d891909751c38abcdfd386ac0a5a1127954fbc332af6b5ceae07efd \
     --hash=sha256:9068bc196136463f5245e51efda838afa15aaeca9903f49050dfa2679db4d252
-tzlocal==5.2 ; python_version >= "3.12" and python_version < "3.13" \
-    --hash=sha256:49816ef2fe65ea8ac19d19aa7a1ae0551c834303d5014c6d5a62e4cbda8047b8 \
-    --hash=sha256:8d399205578f1a9342816409cc1e46a93ebd5755e39ea2d85334bea911bf0e6e
+tzlocal==5.4.3 ; python_version >= "3.12" and python_version < "3.13" \
+    --hash=sha256:24ce97bb58e2a973f7640ec2553ab4e6f6d5a0d0d1aa9dc43bca21d89e1feb82 \
+    --hash=sha256:3a8c9bc18cf47e1dcde252ea0e6a72a6cde320a400b6ac6db1f1f8cccd553c00
 urllib3==2.2.2 ; python_version >= "3.12" and python_version < "3.13" \
     --hash=sha256:a448b2f64d686155468037e1ace9f2d2199776e17f0a46610480d311f73e3472 \
     --hash=sha256:dd505485549a7a552833da5e6063639d0d177c04f23bc3864e41e5dc5f612168
