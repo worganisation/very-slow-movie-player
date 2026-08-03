@@ -51,8 +51,10 @@ class RaspberryPi:
 
     def __init__(self) -> None:
         try:
-            from RPi import GPIO  # noqa: PLC0415
-            from spidev import SpiDev  # type: ignore[import-not-found] # noqa: PLC0415
+            from RPi import GPIO  # ruff: ignore[import-outside-top-level]
+            from spidev import (
+                SpiDev,  # type: ignore[import-not-found] # ruff: ignore[import-outside-top-level]
+            )
 
             self.gpio = GPIO
 
@@ -85,7 +87,7 @@ class RaspberryPi:
     def module_init(self) -> Literal[0]:
         """Module initialization."""
         self.gpio.setmode(self.gpio.BCM)
-        self.gpio.setwarnings(False)  # noqa: FBT003
+        self.gpio.setwarnings(False)  # ruff: ignore[boolean-positional-value-in-call]
         self.gpio.setup(self.RST_PIN, self.gpio.OUT)
         self.gpio.setup(self.DC_PIN, self.gpio.OUT)
         self.gpio.setup(self.CS_PIN, self.gpio.OUT)
