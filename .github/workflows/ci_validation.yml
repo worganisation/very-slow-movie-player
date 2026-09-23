@@ -1,22 +1,55 @@
 ---
-name: 'CI: Validation'
+name: CI
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  ci-validation:
-    name: 'CI: Validation'
-    uses: worgarside/github-config-files/.github/workflows/__ci_validation.yml@main
-    with:
-      build-branch: ${{ github.ref }}
-      build-type: ''
-      node-build-directory: ''
-      python-version: '3.12'
-      unit-test: ''
-    secrets: inherit
+  hooks:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: |
+            3.11
+            3.12
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          prek-version: 0.4.12
+          cache: false
+          extra-args: --all-files
+
+  actionlint:
+    name: Lint workflows
+    uses: worganisation/github-config-files/.github/workflows/__actionlint.yml@main
+
+  sonar:
+    name: Sonar quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # yamllint disable-line rule:line-length
+      - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.qualitygate.wait=true
