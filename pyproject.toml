@@ -19,7 +19,7 @@ wg-utilities = { extras = [
 ], version = "^5.15.3" }
 pydantic = "*"
 httpx = "^0.27.2"
-youtube-dl-nightly = "^2024.8.7"
+youtube-dl-nightly = "^2024.12.17"
 
 [tool.codespell]
 skip = '*.json,*.csv,*.xml,*.lock'
