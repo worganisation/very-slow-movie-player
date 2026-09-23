@@ -57,7 +57,8 @@ class YouTubeVideoInfo(BaseModel):
             str: the video title, with no characters that will break file names.
         """
         return (
-            self.title.replace("<", "_")
+            self.title
+            .replace("<", "_")
             .replace(">", "_")
             .replace(":", "_")
             .replace('"', "_")

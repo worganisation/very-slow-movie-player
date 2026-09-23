@@ -238,7 +238,7 @@ def play_video(video_path: Path) -> None:
 
     current_frame = get_progress(
         video_path,
-        2000 if frame_count >= 10000 else 0,  # noqa: PLR2004
+        2000 if frame_count >= 10000 else 0,  # ruff: ignore[magic-value-comparison]
     )
 
     hrs, secs = divmod(
