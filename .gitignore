@@ -346,3 +346,6 @@ resources/gh_cli/
 .github_token
 
 .media
+
+# Renovate repository policy
+!/renovate.json
