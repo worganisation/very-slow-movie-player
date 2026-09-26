@@ -1,8 +1,10 @@
-"""Currently just displays photos from an album on Google Photos."""
+"""Display frames from a local video on the E-paper panel."""
 
 from __future__ import annotations
 
+from fractions import Fraction
 from json import dumps, loads
+from math import ceil
 from os import getenv
 from pathlib import Path
 from time import sleep
@@ -11,7 +13,6 @@ from typing import TypedDict
 from PIL import Image
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
-from wg_utilities.clients.google_photos import GooglePhotosClient, MediaType
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
 
@@ -19,17 +20,6 @@ from ffmpeg import input as ffmpeg_input  # type: ignore[attr-defined]
 from ffmpeg import probe  # type: ignore[attr-defined]
 
 LOGGER = get_streaming_logger(__name__)
-
-
-GOOGLE = GooglePhotosClient(
-    client_id=getenv("GOOGLE_CLIENT_ID"),
-    client_secret=getenv("GOOGLE_CLIENT_SECRET"),
-    headless_auth_link_callback=LOGGER.info,
-    scopes=[
-        "https://www.googleapis.com/auth/photoslibrary",
-        "https://www.googleapis.com/auth/photoslibrary.sharing",
-    ],
-)
 
 
 DISPLAY = EPaperDisplay()
@@ -47,6 +37,7 @@ def extract_frame(
     video_path: Path,
     frame: int,
     *,
+    fps: float,
     extract_output_path: Path = const.EXTRACT_PATH,
 ) -> Path:
     """Output a frame from the video file to a JPG image.
@@ -71,6 +62,7 @@ def extract_frame(
     Args:
         video_path (Path): the name of the file to extract the frame from
         frame (int): the number of the frame to extract
+        fps (float): the video's frames per second
         extract_output_path (Path): the path at which to place the extracted image file
 
     Returns:
@@ -79,7 +71,7 @@ def extract_frame(
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
     (
-        ffmpeg_input(video_path, ss=f"{frame * 41.666666}ms")
+        ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
         .output(extract_output_path, vframes=1)
         .overwrite_output()
         .run(capture_stdout=True, capture_stderr=True)
@@ -167,12 +159,12 @@ def set_progress(
     """
     log_data = loads(const.PROGRESS_LOG.read_text())
 
-    progress = {video_path: {"current": current_frame}}
+    progress = {video_path.as_posix(): {"current": current_frame}}
 
     LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
 
     if frame_count:
-        progress[video_path]["total"] = frame_count
+        progress[video_path.as_posix()]["total"] = frame_count
 
     log_data.update(progress)
 
@@ -204,42 +196,70 @@ def display_image(
     sleep(display_time)
 
 
+def video_metadata(video_path: Path) -> tuple[int, float]:
+    """Get the video frame count and frames per second from ffprobe."""
+    probe_data = probe(video_path)
+    video_stream = next(
+        (
+            stream
+            for stream in probe_data.get("streams", [])
+            if stream.get("codec_type") == "video"
+        ),
+        None,
+    )
+    if video_stream is None:
+        raise RuntimeError("No video stream found in ffmpeg probe")
+
+    fps = 0.0
+    for rate in (video_stream.get("avg_frame_rate"), video_stream.get("r_frame_rate")):
+        try:
+            fps = float(Fraction(rate))
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+        if fps > 0:
+            break
+    if fps <= 0:
+        raise RuntimeError("No usable video frame rate found in ffmpeg probe")
+
+    raw_frame_count = video_stream.get("nb_frames")
+    if raw_frame_count and str(raw_frame_count).isdigit():
+        frame_count = int(raw_frame_count)
+    else:
+        duration = video_stream.get("duration") or probe_data.get("format", {}).get(
+            "duration",
+        )
+        if duration is None:
+            raise RuntimeError("No video duration found in ffmpeg probe")
+        frame_count = ceil(float(duration) * fps)
+
+    return frame_count, fps
+
+
 @process_exception(logger=LOGGER)
 def play_video(video_path: Path) -> None:
     """Play a video file on the E-Paper display.
 
     Args:
-        video_path (str): the path to the file to play
+        video_path (Path): the path to the file to play
 
     Raises:
         FileNotFoundError: if the video path doesn't exist
-        RuntimeError: if the video file is un-usable for some reason
     """
     LOGGER.info("Input video is `%s`", video_path.as_posix())
 
     if not video_path.is_file():
         raise FileNotFoundError(video_path)
 
-    # Check how many frames are in the movie
-    probe_streams = probe(video_path).get("streams")
-
-    if not probe_streams:
-        raise RuntimeError("No streams found in ffmpeg probe")
-
-    frame_count = int(
-        probe_streams[0].get("nb_frames") or 24 * float(probe_streams[0]["duration"]),
-    )
-
+    frame_count, fps = video_metadata(video_path)
     LOGGER.info("There are %d frames in this video", frame_count)
 
-    if getenv("ALWAYS_RESTART_VIDEOS", "true").lower() == "true":
+    if getenv("ALWAYS_RESTART_VIDEOS", "false").lower() == "true":
         LOGGER.debug("Resetting progress log for `%s`", video_path)
         set_progress(video_path, 0, frame_count)
 
-    current_frame = get_progress(
-        video_path,
-        2000 if frame_count >= 10000 else 0,  # noqa: PLR2004
-    )
+    current_frame = get_progress(video_path)
+    if current_frame >= frame_count:
+        current_frame = 0
 
     hrs, secs = divmod(
         (((frame_count - current_frame) / const.INCREMENT) * const.FRAME_DELAY),
@@ -259,9 +279,11 @@ def play_video(video_path: Path) -> None:
 
         # Use ffmpeg to extract a frame from the movie, crop it,
         # letterbox it and output it as a JPG
-        output_path = extract_frame(video_path, frame)
+        output_path = extract_frame(video_path, frame, fps=fps)
 
         display_image(output_path)
+
+    set_progress(video_path, frame_count, frame_count)
 
 
 @process_exception(logger=LOGGER)
@@ -310,43 +332,27 @@ def choose_next_video() -> Path | None:
 
 @process_exception(logger=LOGGER)
 def main() -> None:
-    """Loop through all videos.
+    """Play the local video selected in ``VSMP_VIDEO_PATH``."""
+    video_path = getenv("VSMP_VIDEO_PATH")
+    if not video_path:
+        raise ValueError("VSMP_VIDEO_PATH must point to a local video")
 
-    Loop through the movie directory and then the VSMP Google Photos album.
-    """
+    video = Path(video_path).expanduser()
+    if not video.is_file():
+        raise FileNotFoundError(video)
+
+    const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
     if not const.PROGRESS_LOG.is_file():
         LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
         const.PROGRESS_LOG.write_text("{}")
 
-    # Initialise and clear the screen
     DISPLAY.init()
-    DISPLAY.clear()
-    _ = """
-     while next_video := choose_next_video():
-         try:
-             play_video(next_video)
-         except Exception as exc:
-             # raise
-             LOGGER.exception(
-                 "Unable to play video: `%s - %s`", type(exc).__name__, exc.__str__()
-             )
-    """
-    media_items = set(GOOGLE.get_album_by_name("Very Slow Movie Player").media_items)
-
-    for item in media_items:
-        item.download(
-            const.MEDIA_DIR,
-            width_override=DISPLAY.WIDTH,
-            height_override=DISPLAY.HEIGHT,
-        )
-
-        if item.media_type == MediaType.VIDEO:
-            play_video(item.local_path)
-        elif item.media_type == MediaType.IMAGE:
-            display_image(item.local_path, 300)
-
-    DISPLAY.sleep()
-    DISPLAY.pi.module_exit()
+    try:
+        DISPLAY.clear()
+        play_video(video)
+    finally:
+        DISPLAY.sleep()
+        DISPLAY.pi.module_exit()
 
 
 if __name__ == "__main__":
