@@ -15,6 +15,10 @@ For example:
 VSMP_VIDEO_PATH=/home/worgarside/movies/example.mp4
 ```
 
+`VSMP_IMAGE_GAMMA` controls midtone darkening before the frame is dithered for
+the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
+brightness, or increase it for a darker image.
+
 ## Tooling
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/),

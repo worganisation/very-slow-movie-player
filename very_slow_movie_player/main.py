@@ -187,8 +187,15 @@ def display_image(
 
     LOGGER.info("Displaying `%s` for %s seconds", image_path, display_time)
 
-    # Open JPG in PIL and dither the image into a 1 bit bitmap
-    pil_im = Image.open(output_path).convert(mode="1", dither=Dither.FLOYDSTEINBERG)
+    # Darken midtones before dithering so they remain visible on the E-paper panel.
+    gamma = float(getenv("VSMP_IMAGE_GAMMA", "1.7"))
+    if gamma <= 0:
+        raise ValueError("VSMP_IMAGE_GAMMA must be positive")
+    grayscale = Image.open(output_path).convert("L")
+    darkened = grayscale.point(
+        [round(255 * (value / 255) ** gamma) for value in range(256)],
+    )
+    pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)
 
     # display the image
     DISPLAY.display(DISPLAY.getbuffer(pil_im))

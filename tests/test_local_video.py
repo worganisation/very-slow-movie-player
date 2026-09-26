@@ -9,11 +9,35 @@ from unittest import TestCase
 from unittest.mock import call, patch
 
 import main as player
+from PIL import Image
 from utils import const
 
 
 class LocalVideoTests(TestCase):
     """Verify metadata, progress, and startup behavior."""
+
+    @staticmethod
+    def test_display_darkens_midtones_before_dithering() -> None:
+        """Midtones become black at the default gamma while endpoints stay fixed."""
+        with TemporaryDirectory() as directory:
+            frame = Path(directory) / "frame.png"
+            image = Image.new("L", (3, 1))
+            image.putdata([0, 160, 255])
+            image.save(frame)
+            with (
+                patch.dict("os.environ", {"VSMP_IMAGE_GAMMA": "1.7"}),
+                patch.object(player, "format_image", return_value=frame),
+                patch.object(
+                    player.DISPLAY,
+                    "getbuffer",
+                    side_effect=lambda value: value,
+                ),
+                patch.object(player.DISPLAY, "display") as display,
+                patch.object(player, "sleep"),
+            ):
+                player.display_image(frame, 0)
+
+        assert list(display.call_args.args[0].getdata()) == [0, 0, 255]
 
     @staticmethod
     def test_extract_frame_passes_ffmpeg_a_filename_and_real_timestamp() -> None:
