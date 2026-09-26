@@ -1,25 +1,24 @@
-[tool.poetry]
+[project]
 name = "very-slow-movie-player"
 version = "1.0.3"
 description = ""
-authors = ["Will Garside <worgarside@gmail.com>"]
+authors = [{ name = "Will Garside", email = "worgarside@gmail.com" }]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "rpi-gpio; sys_platform == 'linux'",
+  "pillow",
+  "spidev; sys_platform == 'linux'",
+  "ffmpeg-python",
+  "wg-utilities[clients,devices-epd,exceptions]>=5.15.3,<6",
+  "pydantic",
+  "httpx>=0.27.2,<0.28",
+  "youtube-dl-nightly>=2024.8.7,<2025",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<3.13"
-"rpi.gpio" = { platform = "linux", version = "*" }
-pillow = "*"
-spidev = { platform = "linux", version = "*" }
-ffmpeg-python = "*"
-wg-utilities = { extras = [
-  "clients",
-  "devices-epd",
-  "exceptions",
-], version = "^5.15.3" }
-pydantic = "*"
-httpx = "^0.27.2"
-youtube-dl-nightly = "^2024.8.7"
+[tool.uv]
+package = false
 
 [tool.codespell]
 skip = '*.json,*.csv,*.xml,*.lock'
@@ -156,11 +155,11 @@ sort_by_size = true
 [tool.creosote]
 paths = ["very_slow_movie_player"]
 deps-file = "pyproject.toml"
-sections = ["tool.poetry.dependencies"]
+sections = ["project.dependencies"]
 exclude-deps = [
   "ffmpeg-python",
   "pillow",
-  "rpi.gpio",
+  "rpi-gpio",
   "spidev",
   "youtube-dl-nightly",
 ]
