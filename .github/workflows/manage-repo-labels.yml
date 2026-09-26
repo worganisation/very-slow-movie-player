@@ -12,6 +12,8 @@ on:
 jobs:
   manage-repo-labels:
     name: Manage Repo Labels
-    uses: worganisation/github-config-files/.github/workflows/__manage-repo-labels.yml@0.10.0
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__manage-repo-labels.yml@61df7cff685739aef6427c565445b5508619cd0a # 0.10.0
     permissions:
+      contents: read
       issues: write
