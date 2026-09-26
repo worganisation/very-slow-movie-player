@@ -59,7 +59,7 @@ update:
 deploy tag:
     #!/usr/bin/env bash
     set -euo pipefail
-    tag='{{ tag }}'
+    tag={{ quote(tag) }}
     if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Expected a stable semantic release tag" >&2
         exit 1

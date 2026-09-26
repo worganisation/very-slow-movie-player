@@ -87,5 +87,5 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/vsmp_known_hosts" \
             "${DEPLOY_SSH_USER}@${ip}" \
-            "cd /home/${DEPLOY_SSH_USER}/very-slow-movie-player && just deploy ${TAG}"
+            "bash -lc 'cd /home/${DEPLOY_SSH_USER}/very-slow-movie-player && just deploy ${TAG}'"
           echo "Deployed ${TAG} to ${VSMP_TAILSCALE_HOSTNAME}" >> "$GITHUB_STEP_SUMMARY"
