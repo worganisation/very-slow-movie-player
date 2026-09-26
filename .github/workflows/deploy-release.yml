@@ -21,8 +21,8 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      !github.event.release.prerelease
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'release' && !github.event.release.prerelease)
     name: Deploy to VSMPPi
     environment: production-deploy
     runs-on: ubuntu-latest
