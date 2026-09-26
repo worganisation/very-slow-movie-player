@@ -18,7 +18,8 @@ concurrency:
 jobs:
   hooks:
     name: Prek hooks
-    uses: worganisation/github-config-files/.github/workflows/__prek-hooks.yml@0.8.7
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__prek-hooks.yml@b9b0324c6b48dedbaa62e698a708c0f3e89042ff # 0.8.7
     with:
       python-version: '3.12'
       sync-project-dependencies: 'false'
@@ -26,7 +27,8 @@ jobs:
 
   actionlint:
     name: Lint workflows
-    uses: worganisation/github-config-files/.github/workflows/__actionlint.yml@0.8.7
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__actionlint.yml@61df7cff685739aef6427c565445b5508619cd0a # 0.10.0
 
   sonar:
     name: Sonar quality gate
