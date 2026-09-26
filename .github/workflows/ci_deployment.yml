@@ -8,7 +8,7 @@ on:
     paths:
       - very_slow_movie_player/**
       - pyproject.toml
-      - poetry.lock
+      - uv.lock
 
 jobs:
   ci-validation:

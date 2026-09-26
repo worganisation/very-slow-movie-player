@@ -17,19 +17,13 @@ concurrency:
 
 jobs:
   hooks:
-    name: Pre-commit hooks
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
-        with:
-          prek-version: 0.4.12
-          cache: false
-          extra-args: --all-files
+    name: Prek hooks
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__prek-hooks.yml@b9b0324c6b48dedbaa62e698a708c0f3e89042ff # 0.8.7
+    with:
+      python-version: '3.12'
+      sync-project-dependencies: 'false'
+    secrets: inherit
 
   actionlint:
     name: Lint workflows
