@@ -12,8 +12,14 @@ on:
 jobs:
   manage-repo-labels:
     name: Manage Repo Labels
-    # yamllint disable-line rule:line-length
-    uses: worganisation/github-config-files/.github/workflows/__manage-repo-labels.yml@61df7cff685739aef6427c565445b5508619cd0a # 0.10.0
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run Labeler
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          yaml-file: .github/repo_labels.yml
