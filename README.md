@@ -26,7 +26,10 @@ prerelease, draft, or tag without a published release is not deployed.
 
 The Pi checkout is `/home/worgarside/very-slow-movie-player`. `just deploy
 <tag>` refuses local changes, checks that the tag is on `origin/main`, installs
-locked runtime dependencies with uv, then restarts and checks `vsmp.service`.
+locked runtime dependencies with uv, then restarts `vsmp.service`. Deployment
+reports success only if the same service process stays active for 20 seconds
+without a systemd restart; this catches startup crashes but does not prove that
+frames are rendering on the display.
 The systemd unit in `service/vsmp.service` uses the Pi's `worgarside` account.
 The Pi needs Git, uv, just, Tailscale, SSH, SPI, and a populated private `.env`
 before its first deployment. Allow the deploy account to run only

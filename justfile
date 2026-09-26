@@ -77,4 +77,20 @@ deploy tag:
     git switch --detach "$target"
     uv sync --locked --no-dev
     sudo -n systemctl restart vsmp.service
-    sudo -n systemctl is-active --quiet vsmp.service
+    # Type=simple can report active before application startup has finished.
+    # Require one uninterrupted process for longer than RestartSec (5s).
+    pid="$(systemctl show --value --property=MainPID vsmp.service)"
+    restarts="$(systemctl show --value --property=NRestarts vsmp.service)"
+    if [[ ! "$pid" =~ ^[1-9][0-9]*$ || ! "$restarts" =~ ^[0-9]+$ ]]; then
+        echo "VSMP did not start with a valid process" >&2
+        exit 1
+    fi
+    for ((attempt = 0; attempt < 20; attempt++)); do
+        sleep 1
+        if ! sudo -n systemctl is-active --quiet vsmp.service || \
+            [[ "$(systemctl show --value --property=MainPID vsmp.service)" != "$pid" ]] || \
+            [[ "$(systemctl show --value --property=NRestarts vsmp.service)" != "$restarts" ]]; then
+            echo "VSMP exited or restarted during the deployment health check" >&2
+            exit 1
+        fi
+    done
