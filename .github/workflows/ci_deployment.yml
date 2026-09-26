@@ -13,7 +13,7 @@ on:
 jobs:
   ci-validation:
     name: 'CI: Validation'
-    uses: worganisation/github-config-files/.github/workflows/__ci-validation.yml@main
+    uses: worganisation/github-config-files/.github/workflows/__ci-validation.yml@0.8.7
     with:
       build-branch: ${{ github.ref }}
       build-type: ''
@@ -33,7 +33,7 @@ jobs:
       id-token: write
       contents: read
       pages: write
-    uses: worganisation/github-config-files/.github/workflows/__ci-deployment.yml@main
+    uses: worganisation/github-config-files/.github/workflows/__ci-deployment.yml@0.8.7
     with:
       build-branch: ${{ github.ref }}
       build-type: ''

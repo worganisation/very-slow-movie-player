@@ -19,7 +19,7 @@ jobs:
       !github.event.pull_request.draft &&
       !startsWith(github.head_ref, 'renovate/')
     # yamllint disable-line rule:line-length
-    uses: worganisation/github-config-files/.github/workflows/__set-pr-auto-merge.yml@main
+    uses: worganisation/github-config-files/.github/workflows/__set-pr-auto-merge.yml@0.8.7
     with:
       head-ref: ${{ github.head_ref }}
       pr-html-url: ${{ github.event.pull_request.html_url }}

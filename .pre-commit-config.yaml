@@ -33,12 +33,12 @@ repos:
       - id: ruff
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.2
+    rev: v1.7.12
     hooks:
       - id: actionlint
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
         args:
@@ -69,7 +69,7 @@ repos:
           - '4096'
 
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.35.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
         args:
@@ -101,7 +101,7 @@ repos:
       - id: python-check-mock-methods
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
+    rev: v2.4.3
     hooks:
       - id: codespell
         additional_dependencies:
