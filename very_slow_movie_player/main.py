@@ -72,7 +72,7 @@ def extract_frame(
 
     (
         ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
-        .output(extract_output_path, vframes=1)
+        .output(str(extract_output_path), vframes=1)
         .overwrite_output()
         .run(capture_stdout=True, capture_stderr=True)
     )
