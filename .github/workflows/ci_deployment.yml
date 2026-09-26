@@ -13,7 +13,8 @@ on:
 jobs:
   ci-validation:
     name: 'CI: Validation'
-    uses: worganisation/github-config-files/.github/workflows/__ci-validation.yml@main
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__ci-validation.yml@b9b0324c6b48dedbaa62e698a708c0f3e89042ff # 0.8.7
     with:
       build-branch: ${{ github.ref }}
       build-type: ''
@@ -33,7 +34,8 @@ jobs:
       id-token: write
       contents: read
       pages: write
-    uses: worganisation/github-config-files/.github/workflows/__ci-deployment.yml@main
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__ci-deployment.yml@b9b0324c6b48dedbaa62e698a708c0f3e89042ff # 0.8.7
     with:
       build-branch: ${{ github.ref }}
       build-type: ''

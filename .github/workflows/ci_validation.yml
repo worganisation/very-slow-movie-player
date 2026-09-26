@@ -24,9 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: |
-            3.11
-            3.12
+          python-version: '3.12'
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
         with:
           prek-version: 0.4.12
@@ -35,7 +33,8 @@ jobs:
 
   actionlint:
     name: Lint workflows
-    uses: worganisation/github-config-files/.github/workflows/__actionlint.yml@main
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__actionlint.yml@61df7cff685739aef6427c565445b5508619cd0a # 0.10.0
 
   sonar:
     name: Sonar quality gate
