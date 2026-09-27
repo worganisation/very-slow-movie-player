@@ -23,6 +23,10 @@ captions. The cue is selected at the extracted frame's media timestamp, not the
 wall clock; silence remains blank. Changes apply on the next refresh; use Redisplay
 current frame to preview them while preserving the minimum panel refresh interval.
 The retained MQTT image is the exact bitmap sent successfully to the panel.
+**Current caption** contains the verbatim displayed text, including line breaks,
+and is blank for silence, disabled captions, or a caption rendering failure.
+**Video timestamp** reports the displayed frame's media position as `HH:MM:SS`
+and is blank for photos. Both update only after a successful panel refresh.
 
 The initial style is 26px serif text in a 96px light margin. The full photo fits
 above the margin without cropping. Overlay uses light text on a dark band. Photo

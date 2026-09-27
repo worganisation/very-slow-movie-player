@@ -203,6 +203,7 @@ def display_image(
         darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
     ):
         rendered = monochrome
+        displayed_caption = ""
         if controls is not None and caption:
             try:
                 rendered = render_caption(
@@ -215,12 +216,14 @@ def display_image(
             except (ValueError, RuntimeError) as exc:
                 mqtt.state("caption_error", str(exc)[:255])
             else:
+                displayed_caption = caption
                 mqtt.state("caption_error", "none")
         try:
             buffer = DISPLAY.getbuffer(rendered)
             DISPLAY.display(buffer)
         except Exception as exc:
             raise PanelRefreshError("Panel refresh failed") from exc
+        mqtt.state("current_caption", displayed_caption)
         try:
             with BytesIO() as png:
                 rendered.save(png, format="PNG")
@@ -467,6 +470,13 @@ class PlaybackRuntime:
         self.current_frame = current_frame
         self.current_frame_count = frame_count
         self.current_video = video_frame
+        timestamp = ""
+        if video_frame is not None:
+            _, frame, fps, _, _ = video_frame
+            minutes, seconds = divmod(int(frame / fps), 60)
+            hours, minutes = divmod(minutes, 60)
+            timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        self.mqtt.state("video_timestamp", timestamp)
         self.mqtt.state(
             "current_media",
             (media if self.controls.source == "library" else Path(media).stem)[:255],
@@ -764,6 +774,8 @@ def main() -> None:
         _ = DISPLAY.init()
         display_initialized = True
         DISPLAY.clear()  # Startup clear is separate from scheduled frame refreshes.
+        runtime.mqtt.state("current_caption", "")
+        runtime.mqtt.state("video_timestamp", "")
         try:
             runtime.mqtt.start()
             mqtt_started = True

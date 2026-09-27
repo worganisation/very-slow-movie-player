@@ -262,6 +262,8 @@ class HAClient:
                 retain=False,
             )
         for name, label in (
+            ("current_caption", "Current caption"),
+            ("video_timestamp", "Video timestamp"),
             ("caption_error", "Caption error"),
             ("import_status", "Media import status"),
             ("import_error", "Media import error"),
