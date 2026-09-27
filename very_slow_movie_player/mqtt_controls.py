@@ -84,7 +84,7 @@ class HAClient:
             self.client.tls_set(cert_reqs=CERT_REQUIRED)  # pyright: ignore[reportUnknownMemberType]
         self._lock: Lock = Lock()
         self._stopping: bool = False
-        self._states: dict[str, str] = {}
+        self._states: dict[str, str] = {"import_youtube": "", "import_jellyfin": ""}
         self._albums: dict[str, str] = {
             str(SETTINGS.immich_album_id): str(SETTINGS.immich_album_id)
         }
@@ -239,7 +239,7 @@ class HAClient:
                 name,
                 label,
                 mode="text",
-                min=1,
+                min=0,
                 max=255,
                 command_topic=f"{self.root}/command/{name}",
                 state_topic=f"{self.root}/state/{name}",

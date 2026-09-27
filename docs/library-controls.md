@@ -7,6 +7,9 @@ to select a version and an audio language. Multilingual files require an explici
 audio language.
 Imports run in a cancellable child process; only one HA request runs at a time. Retained
 commands are ignored, and import requests are never replayed on restart.
+Import fields allow a blank state and announce it on startup, MQTT reconnect,
+and Home Assistant birth. Accepted requests clear the field; blank submissions
+are still rejected by the importer rather than starting a download.
 Stopping VSMP terminates the import process group with a bounded wait; interrupted
 imports remain retryable. Accepted URLs are cleared from retained MQTT text state.
 
