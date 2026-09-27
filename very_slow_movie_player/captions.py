@@ -108,7 +108,63 @@ def _rolling_dedup(cues: list[CaptionCue]) -> list[CaptionCue]:
     return result
 
 
-def normalize_subtitles(  # noqa: C901, PLR0912
+def _ass_dialogue(line: str) -> CaptionCue | None:
+    fields = line.partition(":")[2].split(",", 9)
+    if len(fields) != _ASS_FIELDS:
+        raise ValueError("malformed ASS dialogue")
+    start, end = _seconds(fields[1]), _seconds(fields[2])
+    cleaned = _clean_text(fields[9])
+    return CaptionCue(start=start, end=end, text=cleaned) if cleaned else None
+
+
+def _ass_cues(text: str) -> list[CaptionCue]:
+    cues: list[CaptionCue] = []
+    in_events = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_events = stripped.casefold() == "[events]"
+        if in_events and stripped.startswith("Dialogue:"):
+            cue = _ass_dialogue(stripped)
+            if cue is not None:
+                cues.append(cue)
+    return cues
+
+
+def _timed_block(block: str) -> CaptionCue | None:
+    lines = block.splitlines()
+    if not lines or lines[0].startswith((
+        "WEBVTT",
+        "NOTE",
+        "STYLE",
+        "REGION",
+        "X-TIMESTAMP-MAP",
+    )):
+        return None
+    for index, line in enumerate(lines):
+        if "-->" in line:
+            left, right = line.split("-->", 1)
+            start = _seconds(left)
+            parts = right.strip().split()
+            if not parts:
+                raise ValueError("missing subtitle end timestamp")
+            end = _seconds(parts[0])
+            cleaned = _clean_text("\n".join(lines[index + 1 :]))
+            return CaptionCue(start=start, end=end, text=cleaned) if cleaned else None
+    raise ValueError("subtitle cue has no timing line")
+
+
+def _text_cues(text: str) -> list[CaptionCue]:
+    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").lstrip("\ufeff"))
+    cues: list[CaptionCue] = []
+    for block in blocks:
+        cue = _timed_block(block)
+        if cue is not None:
+            cues.append(cue)
+    return cues
+
+
+def normalize_subtitles(
     text: str,
     format: str,  # noqa: A002 - public API names the subtitle format.
     *,
@@ -122,51 +178,7 @@ def normalize_subtitles(  # noqa: C901, PLR0912
     kind = format.lower().lstrip(".")
     if kind not in {"srt", "vtt", "webvtt", "ass", "ssa"}:
         raise ValueError(f"unsupported subtitle format: {format}")
-    cues: list[CaptionCue] = []
-    if kind in {"ass", "ssa"}:
-        in_events = False
-        for line in text.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("["):
-                in_events = stripped.casefold() == "[events]"
-            if not in_events or not stripped.startswith("Dialogue:"):
-                continue
-            fields = stripped.partition(":")[2].split(",", 9)
-            if len(fields) != _ASS_FIELDS:
-                raise ValueError("malformed ASS dialogue")
-            start, end = _seconds(fields[1]), _seconds(fields[2])
-            cleaned = _clean_text(fields[9])
-            if cleaned:
-                cues.append(CaptionCue(start=start, end=end, text=cleaned))
-    else:
-        blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").lstrip("\ufeff"))
-        for block in blocks:
-            lines = block.splitlines()
-            if not lines or lines[0].startswith((
-                "WEBVTT",
-                "NOTE",
-                "STYLE",
-                "REGION",
-                "X-TIMESTAMP-MAP",
-            )):
-                continue
-            found = False
-            for index, line in enumerate(lines):
-                if "-->" not in line:
-                    continue
-                found = True
-                left, right = line.split("-->", 1)
-                start = _seconds(left)
-                parts = right.strip().split()
-                if not parts:
-                    raise ValueError("missing subtitle end timestamp")
-                end = _seconds(parts[0])
-                cleaned = _clean_text("\n".join(lines[index + 1 :]))
-                if cleaned:
-                    cues.append(CaptionCue(start=start, end=end, text=cleaned))
-                break
-            if not found:
-                raise ValueError("subtitle cue has no timing line")
+    cues = _ass_cues(text) if kind in {"ass", "ssa"} else _text_cues(text)
     cues.sort(key=lambda cue: (cue.start, cue.end, cue.text))
     if not cues:
         raise ValueError("subtitle track has no usable cues")
@@ -201,36 +213,36 @@ class _WhisperModel(Protocol):
         raise NotImplementedError
 
 
+def _phrase_boundary(current: Sequence[_Word], word: _Word) -> bool:
+    previous = current[-1]
+    return (
+        word.start - previous.end > _SPEECH_GAP_SECONDS
+        or word.end - current[0].start > _MAX_PHRASE_SECONDS
+        or len("".join(item.word for item in current)) + len(word.word)
+        > _MAX_PHRASE_CHARS
+        or previous.word.rstrip().endswith((".", "!", "?"))
+    )
+
+
+def _append_phrase(cues: list[CaptionCue], words: Sequence[_Word]) -> None:
+    if words:
+        text = _clean_text("".join(word.word for word in words))
+        if text:
+            cues.append(CaptionCue(start=words[0].start, end=words[-1].end, text=text))
+
+
 def _word_cues(words: Sequence[_Word]) -> list[CaptionCue]:
     """Group consecutive word timestamps within one Whisper segment."""
     cues: list[CaptionCue] = []
     current: list[_Word] = []
-
-    def flush() -> None:
-        if current:
-            text = _clean_text("".join(word.word for word in current))
-            if text:
-                cues.append(
-                    CaptionCue(start=current[0].start, end=current[-1].end, text=text)
-                )
-            current.clear()
-
     for word in words:
         if not _clean_text(word.word) or not word.end > word.start >= 0:
             continue
-        if current:
-            previous = current[-1]
-            gap = word.start - previous.end
-            long_phrase = (
-                word.end - current[0].start > _MAX_PHRASE_SECONDS
-                or len("".join(item.word for item in current)) + len(word.word)
-                > _MAX_PHRASE_CHARS
-            )
-            sentence_end = previous.word.rstrip().endswith((".", "!", "?"))
-            if gap > _SPEECH_GAP_SECONDS or long_phrase or sentence_end:
-                flush()
+        if current and _phrase_boundary(current, word):
+            _append_phrase(cues, current)
+            current = []
         current.append(word)
-    flush()
+    _append_phrase(cues, current)
     return cues
 
 

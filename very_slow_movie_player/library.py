@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 from storage import connect
 
 type ImportStatus = Literal["importing", "ready", "failed"]
+type JsonObject = dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +235,34 @@ class MediaLibrary:
     ) -> LibraryItem:
         """Validate staged assets, then atomically publish one complete directory."""
         stage = self.staging_dir(media_id)
+        self._validate_staged_assets(stage, video, captions)
+        destination = self.root / media_id
+        self._move_staging_dir(media_id, stage, destination)
+        final_video = destination / video.name
+        final_captions = destination / captions.name if captions is not None else None
+        caption_status = self._caption_status(final_captions, caption_error)
+        connection = connect(self.database)
+        try:
+            with connection:
+                _ = connection.execute(
+                    """UPDATE media_library SET status='ready',
+                    error=NULL, progress=1, video_path=?, captions_path=?,
+                    caption_status=?, caption_error=? WHERE id=?""",
+                    (
+                        str(final_video),
+                        str(final_captions) if final_captions else None,
+                        caption_status,
+                        caption_error[:500] if caption_error else None,
+                        media_id,
+                    ),
+                )
+        finally:
+            connection.close()
+        return self.get(media_id)
+
+    def _validate_staged_assets(
+        self, stage: Path, video: Path, captions: Path | None
+    ) -> None:
         if video.parent != stage or (captions is not None and captions.parent != stage):
             raise ValueError("Import assets must be in their staging directory")
         self.probe(video)
@@ -241,7 +270,8 @@ class MediaLibrary:
             not captions.is_file() or captions.stat().st_size == 0
         ):
             raise ValueError("Caption file is missing or empty")
-        destination = self.root / media_id
+
+    def _move_staging_dir(self, media_id: str, stage: Path, destination: Path) -> None:
         backup = self.root / f".{media_id}.backup"
         if backup.exists():
             shutil.rmtree(backup)
@@ -254,30 +284,14 @@ class MediaLibrary:
                 _ = backup.rename(destination)
             raise
         shutil.rmtree(backup, ignore_errors=True)
-        final_video = destination / video.name
-        final_captions = destination / captions.name if captions is not None else None
-        connection = connect(self.database)
-        try:
-            with connection:
-                _ = connection.execute(
-                    """UPDATE media_library SET status='ready',
-                    error=NULL, progress=1, video_path=?, captions_path=?,
-                    caption_status=?, caption_error=? WHERE id=?""",
-                    (
-                        str(final_video),
-                        str(final_captions) if final_captions else None,
-                        "ready"
-                        if final_captions
-                        else "failed"
-                        if caption_error
-                        else "missing",
-                        caption_error[:500] if caption_error else None,
-                        media_id,
-                    ),
-                )
-        finally:
-            connection.close()
-        return self.get(media_id)
+
+    @staticmethod
+    def _caption_status(captions: Path | None, error: str | None) -> str:
+        if captions is not None:
+            return "ready"
+        if error:
+            return "failed"
+        return "missing"
 
     @staticmethod
     def probe(video: Path) -> None:
@@ -306,11 +320,11 @@ class MediaLibrary:
         )
         if result.returncode != 0:
             raise ValueError("Downloaded video failed ffprobe integrity check")
-        data = cast("dict[str, object]", json.loads(result.stdout))
+        data = cast("JsonObject", json.loads(result.stdout))
         streams = data.get("streams")
         typed_streams = (
             [
-                cast("dict[str, object]", stream)
+                cast("JsonObject", stream)
                 for stream in cast("list[object]", streams or [])
                 if isinstance(stream, dict)
             ]
@@ -327,7 +341,7 @@ class MediaLibrary:
             raise ValueError("Downloaded file contains no video stream")
         format_data = data.get("format")
         duration = (
-            cast("dict[str, object]", format_data).get("duration")
+            cast("JsonObject", format_data).get("duration")
             if isinstance(format_data, dict)
             else None
         )
@@ -351,7 +365,7 @@ class MediaLibrary:
     def _attached_picture(stream: dict[str, object]) -> bool:
         disposition = stream.get("disposition")
         return (
-            bool(cast("dict[str, object]", disposition).get("attached_pic"))
+            bool(cast("JsonObject", disposition).get("attached_pic"))
             if isinstance(disposition, dict)
             else False
         )
