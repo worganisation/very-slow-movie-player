@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 from urllib.parse import urlsplit
-from uuid import UUID
+from uuid import UUID  # noqa: TC003 - Pydantic needs this when building its schema
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,14 +33,16 @@ class Settings(BaseSettings):
 
     @field_validator("vsmp_source", mode="before")
     @classmethod
-    def normalize_source(_cls, value: object) -> object:
+    def normalize_source(cls, value: object) -> object:
         """Retain the previous case-insensitive source selector."""
+        _ = cls
         return value.casefold() if isinstance(value, str) else value
 
     @field_validator("vsmp_video_path")
     @classmethod
-    def validate_video_path(_cls, value: Path) -> Path:
+    def validate_video_path(cls, value: Path) -> Path:
         """Require an existing, absolute local media path in all modes."""
+        _ = cls
         path = value.expanduser()
         if not path.is_absolute() or not path.is_file():
             raise ValueError("VSMP_VIDEO_PATH must name an existing absolute file")
@@ -48,25 +50,30 @@ class Settings(BaseSettings):
 
     @field_validator("immich_url")
     @classmethod
-    def validate_immich_url(_cls, value: AnyHttpUrl) -> AnyHttpUrl:
+    def validate_immich_url(cls, value: AnyHttpUrl) -> AnyHttpUrl:
         """Reject URL components that would redirect API requests or expose credentials."""
+        _ = cls
         parsed = urlsplit(str(value))
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("IMMICH_URL must not include credentials, query, or fragment")
+            raise ValueError(
+                "IMMICH_URL must not include credentials, query, or fragment"
+            )
         return value
 
     @field_validator("immich_api_key")
     @classmethod
-    def validate_immich_api_key(_cls, value: SecretStr) -> SecretStr:
+    def validate_immich_api_key(cls, value: SecretStr) -> SecretStr:
         """Require a nonblank key without including it in error messages."""
+        _ = cls
         if not value.get_secret_value().strip():
             raise ValueError("IMMICH_API_KEY must not be blank")
         return value
 
     @field_validator("yt_playlist_id")
     @classmethod
-    def validate_playlist_id(_cls, value: str) -> str:
+    def validate_playlist_id(cls, value: str) -> str:
         """Reject empty or whitespace-only playlist IDs."""
+        _ = cls
         if not value.strip():
             raise ValueError("YT_PLAYLIST_ID must not be blank")
         return value.strip()
