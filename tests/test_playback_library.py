@@ -90,6 +90,7 @@ class PlaybackLibraryTests(unittest.TestCase):
             )
         candidate = self.controls.apply_command(self.defaults, "captions_enabled", "OFF")
         candidate = self.controls.apply_command(candidate, "caption_offset", "1.25")
+        candidate = self.controls.apply_command(candidate, "caption_background", "dark")
         with (
             patch.object(self.controls, "initialize"),
             patch.object(
@@ -99,15 +100,21 @@ class PlaybackLibraryTests(unittest.TestCase):
                 self.controls.PlaybackControls, "defaults", return_value=self.defaults
             ),
         ):
-            self.controls.save_controls(candidate, {"captions_enabled", "caption_offset"})
+            self.controls.save_controls(
+                candidate, {"captions_enabled", "caption_offset", "caption_background"}
+            )
             restored, names = self.controls.load_controls()
         self.assertFalse(restored.captions_enabled)
         self.assertEqual(restored.caption_offset, 1.25)
-        self.assertEqual(names, {"captions_enabled", "caption_offset"})
+        self.assertEqual(restored.caption_background, "dark")
+        self.assertEqual(
+            names, {"captions_enabled", "caption_offset", "caption_background"}
+        )
         for name, payload in [
             ("caption_offset", "nan"),
             ("caption_font_size", "4"),
             ("caption_style", "invalid"),
+            ("caption_background", "invalid"),
         ]:
             with self.assertRaises(ValueError):
                 self.controls.apply_command(candidate, name, payload)

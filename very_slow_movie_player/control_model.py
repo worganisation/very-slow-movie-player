@@ -14,6 +14,7 @@ CONTROL_NAMES = frozenset({
     "library_id",
     "captions_enabled",
     "caption_style",
+    "caption_background",
     "caption_font",
     "caption_font_size",
     "caption_offset",
@@ -46,6 +47,7 @@ class PlaybackControls(BaseModel):
     library_id: str = "none"
     captions_enabled: bool = True
     caption_style: Literal["margin", "overlay"] = "margin"
+    caption_background: Literal["light", "dark"] = "light"
     caption_font: Literal["serif", "sans"] = "serif"
     caption_font_size: Annotated[int, Field(ge=16, le=40)] = 26
     caption_offset: Annotated[float, Field(ge=-60, le=60, allow_inf_nan=False)] = 0
@@ -68,6 +70,7 @@ class PlaybackControls(BaseModel):
             source=SETTINGS.vsmp_source,
             captions_enabled=SETTINGS.vsmp_captions_enabled,
             caption_style=SETTINGS.vsmp_caption_style,
+            caption_background=SETTINGS.vsmp_caption_background,
             caption_font=SETTINGS.vsmp_caption_font,
             caption_font_size=SETTINGS.vsmp_caption_font_size,
             caption_offset=SETTINGS.vsmp_caption_offset,

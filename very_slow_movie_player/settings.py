@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     ] = "disabled"
     vsmp_captions_enabled: bool = True
     vsmp_caption_style: Literal["margin", "overlay"] = "margin"
+    vsmp_caption_background: Literal["light", "dark"] = "light"
     vsmp_caption_font: Literal["serif", "sans"] = "serif"
     vsmp_caption_font_size: Annotated[int, Field(ge=16, le=40)] = 26
     vsmp_caption_offset: Annotated[float, Field(ge=-60, le=60, allow_inf_nan=False)] = 0

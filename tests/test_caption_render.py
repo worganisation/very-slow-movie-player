@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from very_slow_movie_player.caption_render import CaptionLayoutError, render_caption
 
@@ -79,6 +79,27 @@ class CaptionRenderTests(unittest.TestCase):
         """The renderer must never silently cut off words."""
         with self.assertRaisesRegex(CaptionLayoutError, "does not fit"):
             render_caption(self.frame, "W" * 100)
+
+    def test_background_changes_only_band_and_keeps_contrasting_glyphs(self) -> None:
+        """Both layouts invert the caption band without changing photo pixels."""
+        for style in ("margin", "overlay"):
+            light = render_caption(self.frame, "Hello!", style=style, background="light")
+            dark = render_caption(self.frame, "Hello!", style=style, background="dark")
+            self.assertEqual(
+                light.crop((0, 0, 800, 384)).tobytes(),
+                dark.crop((0, 0, 800, 384)).tobytes(),
+            )
+            band = dark.crop((0, 384, 800, 480))
+            self.assertEqual(band.getpixel((0, 0)), 0)
+            self.assertIn(1, band.get_flattened_data())
+            self.assertEqual(
+                ImageChops.invert(light.crop((0, 384, 800, 480)).convert("L")).tobytes(),
+                band.convert("L").tobytes(),
+            )
+            self.assertEqual(
+                render_caption(self.frame, "", style=style, background="dark").tobytes(),
+                self.frame.tobytes(),
+            )
 
     def test_more_than_two_cue_lines_raises(self) -> None:
         """Extra speaker lines are not silently omitted."""

@@ -104,20 +104,22 @@ def render_caption(
     text: str,
     *,
     style: Literal["margin", "overlay"] = "margin",
+    background: Literal["light", "dark"] = "light",
     font: Literal["serif", "sans"] = "serif",
     font_size: int = 26,
 ) -> Image.Image:
     """Return an 800x480 one-bit frame with the full caption visible.
 
     Blank captions leave a copy of the frame unchanged. Margin captions shrink
-    the entire frame to fit above a light band; overlay captions retain the
-    original framing and draw a black caption band across its lower edge.
+    the entire frame to fit above a band; overlay captions retain the
+    original framing and draw a caption band across its lower edge.
     Oversized captions produce ``CaptionLayoutError``.
 
     Args:
         image: Native-resolution mode ``L`` gamma-corrected or mode ``1`` frame.
         text: Caption text; explicit line breaks are preserved.
         style: ``margin`` or ``overlay``.
+        background: ``light`` or ``dark`` band with contrasting text.
         font: ``serif`` or ``sans`` system TrueType font.
         font_size: Preferred caption size in pixels.
 
@@ -128,6 +130,8 @@ def render_caption(
         raise ValueError("Caption input must be an 800x480 mode 1 or L image")
     if style not in {"margin", "overlay"}:
         raise ValueError(f"Unsupported caption style: {style}")
+    if background not in {"light", "dark"}:
+        raise ValueError(f"Unsupported caption background: {background}")
     if font not in _FONT_CANDIDATES:
         raise ValueError(f"Unsupported caption font: {font}")
     if font_size < _MIN_FONT_SIZE:
@@ -150,15 +154,13 @@ def render_caption(
             scaled.convert("1", dither=Image.Dither.FLOYDSTEINBERG) as photo,
         ):
             result.paste(photo, ((_SIZE[0] - photo_width) // 2, 0))
-        ink = 0
     else:
         result = image.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
-        ImageDraw.Draw(result).rectangle(
-            (0, _SIZE[1] - _MARGIN_HEIGHT, _SIZE[0], _SIZE[1]), fill=0
-        )
-        ink = 1
 
     draw = ImageDraw.Draw(result)
+    paper = 1 if background == "light" else 0
+    ink = 1 - paper
+    draw.rectangle((0, _SIZE[1] - _MARGIN_HEIGHT, _SIZE[0], _SIZE[1]), fill=paper)
     block_top = (
         _SIZE[1] - _MARGIN_HEIGHT + (_MARGIN_HEIGHT - len(lines) * line_height) // 2
     )

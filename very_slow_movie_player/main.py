@@ -210,6 +210,7 @@ def display_image(
                     darkened,
                     caption,
                     style=controls.caption_style,
+                    background=controls.caption_background,
                     font=controls.caption_font,
                     font_size=controls.caption_font_size,
                 )
