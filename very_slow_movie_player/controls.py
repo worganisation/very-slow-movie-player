@@ -11,6 +11,16 @@ from control_model import BUTTON_NAMES, CONTROL_NAMES, PlaybackControls
 from pydantic import ValidationError
 from storage import connect, initialize
 
+__all__ = [
+    "BUTTON_NAMES",
+    "CONTROL_NAMES",
+    "CommandMailbox",
+    "PlaybackControls",
+    "apply_command",
+    "load_controls",
+    "save_controls",
+]
+
 
 def load_controls() -> tuple[PlaybackControls, set[str]]:
     """Overlay explicit HA overrides on eagerly validated environment defaults."""
