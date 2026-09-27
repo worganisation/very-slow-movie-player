@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 from time import monotonic
 from typing import TYPE_CHECKING, NoReturn, cast
 
+from caption_render import render_caption
 from controls import (
     CommandMailbox,
     PlaybackControls,
@@ -22,6 +23,7 @@ from controls import (
     save_controls,
 )
 from immich import Asset, ImmichAlbum
+from library_runtime import LibraryRuntime
 from mqtt_controls import HAClient
 from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
@@ -51,6 +53,7 @@ def extract_frame(
     *,
     fps: float,
     stream_index: int,
+    start_time: float = 0,
     extract_output_path: Path = const.EXTRACT_PATH,
 ) -> Path:
     """Output a frame from the video file to a JPG image.
@@ -77,6 +80,7 @@ def extract_frame(
         frame (int): the number of the frame to extract
         fps (float): the video's frames per second
         stream_index (int): the selected ffprobe stream's absolute index
+        start_time (float): the selected video stream's absolute presentation origin
         extract_output_path (Path): the path at which to place the extracted image file
 
     Returns:
@@ -104,7 +108,9 @@ def extract_frame(
         temporary = Path(output.name)
     try:
         _ = (
-            ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
+            ffmpeg_input(
+                video_path, ss=f"{start_time + frame / fps:.6f}", seek_timestamp=1
+            )
             .output(str(temporary), vframes=1, map=f"0:{stream_index}")
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
@@ -170,6 +176,9 @@ def display_image(
     image_path: Path,
     gamma: float,
     mqtt: HAClient,
+    *,
+    caption: str = "",
+    controls: PlaybackControls | None = None,
 ) -> None:
     """Display an image on the EPD.
 
@@ -177,6 +186,8 @@ def display_image(
         image_path (Path): the path to the file to display on the EPD
         gamma (float): correction applied before dithering
         mqtt (HAClient): persistent MQTT publisher
+        caption: Text selected for the exact displayed media timestamp.
+        controls: Confirmed caption styling preferences.
     """
     output_path = format_image(image_path)
 
@@ -191,14 +202,28 @@ def display_image(
         ) as darkened,
         darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
     ):
+        rendered = monochrome
+        if controls is not None and caption:
+            try:
+                rendered = render_caption(
+                    darkened,
+                    caption,
+                    style=controls.caption_style,
+                    font=controls.caption_font,
+                    font_size=controls.caption_font_size,
+                )
+            except (ValueError, RuntimeError) as exc:
+                mqtt.state("caption_error", str(exc)[:255])
+            else:
+                mqtt.state("caption_error", "none")
         try:
-            buffer = DISPLAY.getbuffer(monochrome)
+            buffer = DISPLAY.getbuffer(rendered)
             DISPLAY.display(buffer)
         except Exception as exc:
             raise PanelRefreshError("Panel refresh failed") from exc
         try:
             with BytesIO() as png:
-                monochrome.save(png, format="PNG")
+                rendered.save(png, format="PNG")
                 mqtt.image(png.getvalue())
         except Exception as exc:  # noqa: BLE001 - reporting must not interrupt playback
             logger.warning(
@@ -229,7 +254,19 @@ def usable_frame_count(stream: ProbeStream, info: ProbeInfo, fps: float) -> int:
             raise RuntimeError("Video stream has zero frames")
         return frame_count
 
-    duration = stream.get("duration") or info.get("format", {}).get("duration")
+    duration = stream.get("duration")
+    # Matroska often reports an absolute end timestamp in DURATION, while its
+    # container duration includes other streams and the initial timestamp offset.
+    end_tag = stream.get("tags", {}).get("DURATION")
+    if duration is None and end_tag is not None:
+        try:
+            hours, minutes, seconds = end_tag.split(":")
+            end_time = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
+            duration = str(end_time - float(stream.get("start_time") or 0))
+        except (ValueError, OverflowError):
+            pass
+    if duration is None:
+        duration = info.get("format", {}).get("duration")
     if duration is None:
         raise RuntimeError("No video duration found in ffmpeg probe")
     try:
@@ -245,7 +282,7 @@ def usable_frame_count(stream: ProbeStream, info: ProbeInfo, fps: float) -> int:
     return frame_count
 
 
-def video_metadata(video_path: Path) -> tuple[int, float, int]:
+def video_metadata(video_path: Path) -> tuple[int, float, int, float]:
     """Get a playable video stream's frame count, rate, and absolute index."""
     probe_data = probe(video_path)
     video_stream = next(
@@ -264,7 +301,15 @@ def video_metadata(video_path: Path) -> tuple[int, float, int]:
         raise RuntimeError("No usable video stream index found in ffmpeg probe")
 
     fps = usable_frame_rate(video_stream)
-    return usable_frame_count(video_stream, probe_data, fps), fps, stream_index
+    start_time = float(str(video_stream.get("start_time") or 0))
+    if not isfinite(start_time):
+        raise RuntimeError("No usable video timestamp origin found in ffmpeg probe")
+    return (
+        usable_frame_count(video_stream, probe_data, fps),
+        fps,
+        stream_index,
+        start_time,
+    )
 
 
 class PlaybackRuntime:
@@ -276,15 +321,16 @@ class PlaybackRuntime:
         self.controls, self.overridden = load_controls()
         self.mailbox: CommandMailbox = CommandMailbox()
         self.mqtt: HAClient = HAClient(self.mailbox)
+        self.library: LibraryRuntime = LibraryRuntime(self.mqtt)
         self.last_panel_refresh: float | None = None
         self.current_path: Path | None = None
         self.current_kind: str = "video"
         self.current_media: str = "none"
         self.current_frame: int | None = None
         self.current_frame_count: int | None = None
-        self.current_video: tuple[Path, int, float, int] | None = None
+        self.current_video: tuple[Path, int, float, int, float] | None = None
         self.next_album_refresh: float = 0
-        self.selection: tuple[str, Path, str, str] = self.selection_key()
+        self.selection: tuple[str, Path, str, str, str] = self.selection_key()
         self.buttons: set[str] = set()
         self.mqtt.state("playback_status", "starting")
         self.mqtt.state("current_media", "none")
@@ -293,12 +339,19 @@ class PlaybackRuntime:
         self.mqtt.state("last_error", "none")
         self.mqtt.state("last_refresh", "None")
         self.mqtt.state("next_refresh", "None")
+        self.library.refresh()
         self.publish_controls()
 
-    def selection_key(self) -> tuple[str, Path, str, str]:
+    def selection_key(self) -> tuple[str, Path, str, str, str]:
         """Track fields that change the active source iterator."""
         value = self.controls
-        return (value.source, value.video_path, str(value.album), value.media_type)
+        return (
+            value.source,
+            value.video_path,
+            str(value.album),
+            value.media_type,
+            value.library_id,
+        )
 
     def publish_controls(self) -> None:
         """Report confirmed settings only after persistence succeeds."""
@@ -306,6 +359,8 @@ class PlaybackRuntime:
         for name, value in values.items():
             if isinstance(value, bool):
                 state = "ON" if value else "OFF"
+            elif name == "library_id":
+                state = self.mqtt.library_label(str(value))
             elif name == "album":
                 state = self.mqtt.album_label(str(value))
             else:
@@ -333,6 +388,8 @@ class PlaybackRuntime:
 
     def process_commands(self) -> None:
         """Apply queued changes transactionally outside the MQTT network thread."""
+        self.library.refresh()
+        self.mqtt.state("library_id", self.mqtt.library_label(self.controls.library_id))
         settings, buttons = self.mailbox.drain()
         self.buttons.update(buttons)
         if "restart_video" in self.buttons and self.current_kind == "photo":
@@ -342,7 +399,10 @@ class PlaybackRuntime:
             self.buttons.discard("redisplay")
             self.mqtt.state("last_error", "No frame to redisplay")
         for name, payload in settings.items():
-            self.apply_setting(name, payload)
+            if name in {"import_youtube", "import_jellyfin"}:
+                self.library.submit(name, payload)
+            else:
+                self.apply_setting(name, payload)
         if not settings and not buttons:
             self.maybe_refresh_albums()
 
@@ -359,6 +419,10 @@ class PlaybackRuntime:
         """Persist one command before publishing its confirmed value."""
         try:
             candidate = apply_command(self.controls, name, payload)
+            if name == "library_id" and candidate.library_id != "none":
+                _ = video_metadata(self.library.ready_path(candidate.library_id))
+            if name == "source" and candidate.source == "library":
+                _ = self.library.ready_item(candidate.library_id)
             if name == "video_path":
                 _ = video_metadata(candidate.video_path)
             if name == "album":
@@ -393,7 +457,7 @@ class PlaybackRuntime:
         frame_count: int | None = None,
         *,
         kind: str = "video",
-        video_frame: tuple[Path, int, float, int] | None = None,
+        video_frame: tuple[Path, int, float, int, float] | None = None,
     ) -> None:
         """Record the panel result and schedule the next normal update."""
         self.last_panel_refresh = monotonic()
@@ -403,7 +467,10 @@ class PlaybackRuntime:
         self.current_frame = current_frame
         self.current_frame_count = frame_count
         self.current_video = video_frame
-        self.mqtt.state("current_media", Path(media).stem[:255])
+        self.mqtt.state(
+            "current_media",
+            (media if self.controls.source == "library" else Path(media).stem)[:255],
+        )
         self.mqtt.state(
             "video_current_frame",
             str(current_frame) if current_frame is not None else "None",
@@ -415,7 +482,7 @@ class PlaybackRuntime:
         self.mqtt.state("playback_status", "playing")
         self.mqtt.state("last_error", "none")
 
-    def wait_ready(self, selection: tuple[str, Path, str, str]) -> bool:
+    def wait_ready(self, selection: tuple[str, Path, str, str, str]) -> bool:
         """Interrupt waits for commands, but enforce 180 seconds between frames."""
         while True:
             self.process_commands()
@@ -430,11 +497,25 @@ class PlaybackRuntime:
                 self.buttons.discard("redisplay")
                 image_path = self.current_path
                 if self.current_video is not None:
-                    source, frame, fps, stream_index = self.current_video
+                    source, frame, fps, stream_index, start_time = self.current_video
                     image_path = extract_frame(
-                        source, frame, fps=fps, stream_index=stream_index
+                        source,
+                        frame,
+                        fps=fps,
+                        stream_index=stream_index,
+                        start_time=start_time,
                     )
-                display_image(image_path, self.controls.gamma, self.mqtt)
+                caption = ""
+                if self.current_video is not None:
+                    _, frame, fps, _, _ = self.current_video
+                    caption = self.caption_text(frame / fps)
+                display_image(
+                    image_path,
+                    self.controls.gamma,
+                    self.mqtt,
+                    caption=caption,
+                    controls=self.controls,
+                )
                 self.mark_displayed(
                     image_path,
                     self.current_media,
@@ -466,6 +547,15 @@ class PlaybackRuntime:
                 )
             _ = self.mailbox.wake.wait(timeout=max(0.05, min(remaining, 60)))
 
+    def caption_text(self, timestamp: float) -> str:
+        """Resolve captions only for selected offline library media."""
+        if self.controls.source != "library" or not self.controls.captions_enabled:
+            self.mqtt.state("caption_error", "none")
+            return ""
+        return self.library.caption(
+            self.controls.library_id, timestamp, self.controls.caption_offset
+        )
+
     def _minimum_wait(self) -> float:
         if self.last_panel_refresh is None:
             return 0
@@ -492,7 +582,7 @@ def play_video(
     media_label: str | None = None,
 ) -> None:
     """Advance a video with settings and actions applied between panel updates."""
-    frame_count, fps, stream_index = video_metadata(video_path)
+    frame_count, fps, stream_index, start_time = video_metadata(video_path)
     if runtime.controls.always_restart_videos:
         set_progress(video_path, 0, frame_count)
     frame = get_progress(video_path)
@@ -514,14 +604,22 @@ def play_video(
         elif frame >= frame_count:
             set_progress(video_path, frame_count, frame_count)
             return
-        output = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
-        display_image(output, runtime.controls.gamma, runtime.mqtt)
+        output = extract_frame(
+            video_path, frame, fps=fps, stream_index=stream_index, start_time=start_time
+        )
+        display_image(
+            output,
+            runtime.controls.gamma,
+            runtime.mqtt,
+            caption=runtime.caption_text(frame / fps),
+            controls=runtime.controls,
+        )
         runtime.mark_displayed(
             output,
             media_label or str(video_path),
             frame + 1,
             frame_count,
-            video_frame=(video_path, frame, fps, stream_index),
+            video_frame=(video_path, frame, fps, stream_index, start_time),
         )
         set_progress(video_path, frame, frame_count)
         frame += runtime.controls.frame_advance
@@ -608,7 +706,7 @@ def play_asset_with_retry(
     runtime: PlaybackRuntime,
     album: ImmichAlbum,
     asset: Asset,
-    selection: tuple[str, Path, str, str],
+    selection: tuple[str, Path, str, str, str],
 ) -> None:
     """Allow Next to skip a failing Immich asset without clearing the panel."""
     while runtime.selection == selection:
@@ -635,6 +733,11 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
     try:
         if runtime.controls.source == "local":
             play_video(runtime, runtime.controls.video_path)
+        elif runtime.controls.source == "library":
+            item = runtime.library.ready_item(runtime.controls.library_id)
+            play_video(
+                runtime, runtime.library.ready_path(item.id), media_label=item.title
+            )
         else:
             play_immich_source(runtime)
     except PanelRefreshError:
@@ -671,6 +774,7 @@ def main() -> None:
         previous_error = active_exception()
         _ = signal(SIGTERM, SIG_IGN)
         try:
+            runtime.library.close()
             if mqtt_started:
                 runtime.mqtt.stop()
             if DISPLAY.pi.module_initialized:

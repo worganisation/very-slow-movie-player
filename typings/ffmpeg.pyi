@@ -9,6 +9,8 @@ class ProbeStream(TypedDict, total=False):
     r_frame_rate: str
     nb_frames: str
     duration: str
+    start_time: str
+    tags: dict[str, str]
 
 class ProbeInfo(TypedDict, total=False):
     streams: list[ProbeStream]
@@ -24,5 +26,5 @@ class Stream:
         capture_stderr: bool,
     ) -> tuple[bytes, bytes]: ...
 
-def input(filename: Path, *, ss: str) -> Stream: ...  # noqa: A001
+def input(filename: Path, *, ss: str, seek_timestamp: int = 0) -> Stream: ...  # noqa: A001
 def probe(filename: Path) -> ProbeInfo: ...
