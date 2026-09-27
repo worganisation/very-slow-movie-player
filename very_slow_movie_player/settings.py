@@ -52,6 +52,41 @@ class Settings(BaseSettings):
     vsmp_playback_enabled: bool = True
     always_restart_videos: bool = False
     vsmp_allow_mock_hardware: bool = False
+    vsmp_library_path: Path = Path.home() / "vsmp-library"
+    jellyfin_url: AnyHttpUrl | None = None
+    jellyfin_api_key: SecretStr | None = None
+    jellyfin_user_id: str | None = None
+    vsmp_caption_language: Annotated[
+        str, Field(pattern=r"^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*$")
+    ] = "en"
+    vsmp_asr_backend: Annotated[
+        str, Field(pattern=r"^(disabled|local(?::[a-zA-Z0-9][a-zA-Z0-9._/-]*)?)$")
+    ] = "disabled"
+    vsmp_captions_enabled: bool = True
+    vsmp_caption_style: Literal["margin", "overlay"] = "margin"
+    vsmp_caption_font: Literal["serif", "sans"] = "serif"
+    vsmp_caption_font_size: Annotated[int, Field(ge=16, le=40)] = 26
+    vsmp_caption_offset: Annotated[float, Field(ge=-60, le=60, allow_inf_nan=False)] = 0
+
+    @model_validator(mode="after")
+    def validate_import_settings(self) -> Self:
+        """Validate import configuration even when another source is selected."""
+        values = (self.jellyfin_url, self.jellyfin_api_key, self.jellyfin_user_id)
+        if any(value is not None for value in values) and not all(
+            value is not None for value in values
+        ):
+            raise ValueError(
+                "Jellyfin URL, API key and user ID must be configured together"
+            )
+        if self.jellyfin_url is not None:
+            _ = self.validate_immich_url(self.jellyfin_url)
+        if self.jellyfin_api_key is not None:
+            _ = self.validate_immich_api_key(self.jellyfin_api_key)
+        if self.jellyfin_user_id is not None and not self.jellyfin_user_id.strip():
+            raise ValueError("JELLYFIN_USER_ID must not be blank")
+        if not self.vsmp_library_path.is_absolute():
+            raise ValueError("VSMP_LIBRARY_PATH must be absolute")
+        return self
 
     @field_validator("vsmp_source", mode="before")
     @classmethod

@@ -16,6 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  tests:
+    name: Offline media and caption tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install media tools and caption fonts
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+      - name: Install uv
+        run: pipx install uv==0.12.3
+      - name: Install locked Python dependencies
+        run: uv sync --frozen --no-build --no-install-package rpi-gpio --no-install-package spidev
+      - name: Run hardware-free tests
+        env:
+          PYTHONPATH: very_slow_movie_player
+          VSMP_ALLOW_MOCK_HARDWARE: 'true'
+        run: uv run --no-sync --no-build python -m unittest discover -s tests -v
+
   hooks:
     name: Prek hooks
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
