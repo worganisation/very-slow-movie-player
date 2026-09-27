@@ -31,6 +31,7 @@ THE SOFTWARE.
 from __future__ import annotations
 
 from logging import getLogger
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from .epdconfig import RaspberryPi
@@ -54,6 +55,7 @@ class EPaperDisplay:
 
     WIDTH: Final = 800
     HEIGHT: Final = 480
+    BUSY_TIMEOUT_SECONDS: Final = 30
 
     def __init__(self) -> None:
         self.pi: RaspberryPi = RaspberryPi()
@@ -91,9 +93,15 @@ class EPaperDisplay:
         """Read the busy signal."""
         LOGGER.debug("e-Paper busy")
 
+        deadline = monotonic() + self.BUSY_TIMEOUT_SECONDS
         self.send_command(0x71)
         busy = self.pi.digital_read(self.busy_pin)
         while not busy:
+            if monotonic() >= deadline:
+                raise TimeoutError(
+                    f"E-paper display stayed busy for {self.BUSY_TIMEOUT_SECONDS} seconds",
+                )
+            sleep(0.01)
             self.send_command(0x71)
             busy = self.pi.digital_read(self.busy_pin)
 

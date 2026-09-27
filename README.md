@@ -41,6 +41,10 @@ installs only locked runtime dependencies; `just install-service` installs the
 existing unit, and `just install-all` does both. These recipes do not start the
 service. `just --list` shows the remaining service commands.
 
+If the display's busy signal stays active for more than 30 seconds, playback
+raises an error so systemd can restart the service. Inspect the service journal
+and the display wiring if the error recurs.
+
 ## Release deployment
 
 The **Semantic Release** workflow is started manually on `main`. When it
