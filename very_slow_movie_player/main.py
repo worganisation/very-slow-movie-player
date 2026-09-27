@@ -293,8 +293,8 @@ class PlaybackRuntime:
         self.mqtt.state("current_media", "none")
         self.mqtt.state("video_position", "none")
         self.mqtt.state("last_error", "none")
-        self.mqtt.state("last_refresh", "unknown")
-        self.mqtt.state("next_refresh", "unknown")
+        self.mqtt.state("last_refresh", "None")
+        self.mqtt.state("next_refresh", "None")
         self.publish_controls()
 
     def selection_key(self) -> tuple[str, Path, str, str]:
@@ -443,12 +443,12 @@ class PlaybackRuntime:
             ) and self._minimum_wait() <= 0:
                 return True
             if self.controls.playback_enabled and self._normal_wait() <= 0:
-                self.mqtt.state("next_refresh", "unknown")
+                self.mqtt.state("next_refresh", "None")
                 return True
             remaining = self._minimum_wait() if self.buttons else self._normal_wait()
             if not self.controls.playback_enabled:
                 self.mqtt.state("playback_status", "paused")
-                self.mqtt.state("next_refresh", "unknown")
+                self.mqtt.state("next_refresh", "None")
                 remaining = 60
             elif self.last_panel_refresh is not None:
                 self.mqtt.state(
@@ -612,7 +612,7 @@ def play_asset_with_retry(
             LOGGER.warning("Immich asset failed; retaining current frame: %s", exc)
             runtime.mqtt.state("last_error", str(exc)[:255])
             runtime.mqtt.state("playback_status", "source error")
-            runtime.mqtt.state("next_refresh", "unknown")
+            runtime.mqtt.state("next_refresh", "None")
             _ = runtime.mailbox.wake.wait(60)
             runtime.process_commands()
             if "next" in runtime.buttons:
@@ -635,7 +635,7 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
         LOGGER.warning("Media source failed; retaining current frame: %s", exc)
         runtime.mqtt.state("last_error", str(exc)[:255])
         runtime.mqtt.state("playback_status", "source error")
-        runtime.mqtt.state("next_refresh", "unknown")
+        runtime.mqtt.state("next_refresh", "None")
         _ = runtime.mailbox.wake.wait(60)
 
 
