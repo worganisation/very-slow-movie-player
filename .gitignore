@@ -1,6 +1,7 @@
 *.env
 ffmpeg/ffmpeg
 ffmpeg/ffprobe
+.media/
 !sample.env
 *.zip
 .idea
@@ -228,11 +229,6 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
 
 # Pyre type checker
 .pyre/
