@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Annotated, Self, cast
+from uuid import UUID  # noqa: TC003 - Pydantic resolves Asset.id at runtime
 
 from httpx import Client, Timeout
 from pydantic import BaseModel, Field, ValidationError
@@ -13,7 +14,6 @@ from utils import const
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from uuid import UUID
 
 MAX_SUFFIX_LENGTH = 10
 BAD_REQUEST = 400
