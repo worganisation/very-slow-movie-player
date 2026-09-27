@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-from json import dumps, loads
-from os import O_DIRECTORY, O_RDONLY, close, fsync
-from os import open as open_fd
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-from time import time_ns
+from pathlib import Path  # noqa: TC003 - runtime Path default
 from typing import NotRequired, TypedDict, cast
 
+from storage import connect, initialize
 from wg_utilities.loggers import get_streaming_logger
-
-from . import const
 
 LOGGER = get_streaming_logger(__name__)
 
@@ -22,15 +16,6 @@ class ProgressInfo(TypedDict):
 
     current: int
     total: NotRequired[int]
-
-
-def _sync_directory(directory: Path) -> None:
-    """Persist a renamed directory entry across a power loss."""
-    directory_fd = open_fd(directory, O_RDONLY | O_DIRECTORY)
-    try:
-        fsync(directory_fd)
-    finally:
-        close(directory_fd)
 
 
 def _validate_entry(video_path: object, info: object) -> None:
@@ -51,7 +36,7 @@ def _validate_entry(video_path: object, info: object) -> None:
             raise ValueError("Progress totals must be nonnegative")
 
 
-def _validate_progress(data: object) -> dict[str, ProgressInfo]:
+def validate_progress(data: object) -> dict[str, ProgressInfo]:
     """Reject damaged progress data before it can affect playback."""
     if not isinstance(data, dict):
         raise TypeError("Progress log must contain an object")
@@ -63,50 +48,23 @@ def _validate_progress(data: object) -> dict[str, ProgressInfo]:
     return cast("dict[str, ProgressInfo]", data)
 
 
-def write_progress(
-    data: dict[str, ProgressInfo],
-    path: Path = const.PROGRESS_LOG,
-) -> None:
-    """Replace the progress log only after the complete JSON has reached disk."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
+def load_progress() -> dict[str, ProgressInfo]:
+    """Return all saved media positions after one-time migration."""
+    initialize()
+    connection = connect()
     try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary_file:
-            temporary_path = Path(temporary_file.name)
-            _ = temporary_file.write(dumps(data, indent=2, sort_keys=True))
-            temporary_file.flush()
-            fsync(temporary_file.fileno())
-
-        _ = Path(temporary_path).replace(path)
-        _sync_directory(path.parent)
+        return {
+            path: (
+                {"current": current, "total": total}
+                if total is not None
+                else {"current": current}
+            )
+            for path, current, total in connection.execute(
+                "SELECT media_path, current, total FROM progress"
+            )
+        }
     finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
-
-
-def load_progress(path: Path = const.PROGRESS_LOG) -> dict[str, ProgressInfo]:
-    """Load progress, preserving a damaged log before starting a fresh one."""
-    if not path.is_file():
-        LOGGER.warning("Progress log not found at `%s`", path)
-        write_progress({}, path)
-        return {}
-
-    try:
-        return _validate_progress(cast("object", loads(path.read_text(encoding="utf-8"))))
-    except (TypeError, ValueError) as exc:
-        backup = path.with_name(f"{path.name}.corrupt-{time_ns()}")
-        _ = path.replace(backup)
-        _sync_directory(path.parent)
-        LOGGER.warning("Invalid progress log preserved at `%s`: %s", backup, exc)
-        write_progress({}, path)
-        return {}
+        connection.close()
 
 
 def get_progress(video_path: Path, default: int = 0) -> int:
@@ -125,11 +83,15 @@ def set_progress(
     if current_frame < 0 or (frame_count is not None and frame_count < 0):
         raise ValueError("Progress frames must be nonnegative")
 
-    log_data = load_progress()
-    progress: ProgressInfo = {"current": current_frame}
-    if frame_count is not None:
-        progress["total"] = frame_count
-
-    LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
-    log_data[video_path.as_posix()] = progress
-    write_progress(log_data)
+    initialize()
+    connection = connect()
+    try:
+        with connection:
+            connection.execute(
+                "INSERT INTO progress(media_path, current, total) VALUES (?, ?, ?) "
+                "ON CONFLICT(media_path) DO UPDATE SET current=excluded.current, total=excluded.total "
+                "WHERE current IS NOT excluded.current OR total IS NOT excluded.total",
+                (video_path.as_posix(), current_frame, frame_count),
+            )
+    finally:
+        connection.close()
