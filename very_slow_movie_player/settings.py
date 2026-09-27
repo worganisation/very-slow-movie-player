@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     mqtt_device_id: str = "vsmp_pi"
     mqtt_device_name: str = "Very Slow Movie Player"
     vsmp_image_gamma: Annotated[float, Field(gt=0, allow_inf_nan=False)] = 1.7
+    vsmp_video_frame_delay_seconds: Annotated[
+        float, Field(ge=180, allow_inf_nan=False)
+    ] = 180.0
     always_restart_videos: bool = False
     vsmp_allow_mock_hardware: bool = False
 

@@ -47,9 +47,10 @@ VSMP sends complementary OLD (`0x10`) and NEW (`0x13`) RAM planes before a
 single full refresh (`0x12`). It powers the panel drive off after a completed
 refresh and uses deep sleep on shutdown. Full refresh visibly flashes; the
 manufacturer calls this normal. The manual recommends at least **180 seconds**
-between refreshes, while VSMP's existing local-video interval is **120
-seconds**. That difference is documented for a future hardware-backed decision,
-not silently changed here.
+between refreshes. VSMP's configurable video-frame dwell defaults to **180
+seconds** for both local and Immich videos; Immich still images remain at five
+minutes. The startup clear is a separate refresh and is not paced by the video
+setting, so the setting is not a global panel refresh-rate guarantee.
 
 Before changing initialization, waveform voltages, fast/partial modes, or the
 refresh interval, inspect the actual panel and HAT markings and test clear,

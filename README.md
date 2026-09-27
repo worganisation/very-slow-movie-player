@@ -23,6 +23,7 @@ MQTT_DISCOVERY_PREFIX=homeassistant
 MQTT_DEVICE_ID=vsmp_pi
 MQTT_DEVICE_NAME=Very Slow Movie Player
 VSMP_IMAGE_GAMMA=1.7
+VSMP_VIDEO_FRAME_DELAY_SECONDS=180
 ALWAYS_RESTART_VIDEOS=false
 VSMP_ALLOW_MOCK_HARDWARE=false
 ```
@@ -40,10 +41,17 @@ same values in `.env`.
 ### Local video
 
 Set `VSMP_VIDEO_PATH` in the Pi's private `.env` to the absolute path of a
-local video, then start `vsmp.service`. VSMP displays one frame every two
-minutes and records its position in `very_slow_movie_player/.media/` so it can
-resume after a restart. The media directory is created on first run. The
-video loops after its final frame when systemd restarts the service.
+local video, then start `vsmp.service`. VSMP waits three minutes after each
+displayed video frame by default and records its position in
+`very_slow_movie_player/.media/` so it can resume after a restart. The media
+directory is created on first run. The video loops after its final frame when
+systemd restarts the service.
+
+`VSMP_VIDEO_FRAME_DELAY_SECONDS` sets the wait after each video frame for both
+local videos and Immich videos. It defaults to 180 seconds and must be a finite
+number of at least 180. Immich still images continue to display for five
+minutes. This setting does not govern the startup clear or empty-album checks,
+so it does not promise a minimum interval between every panel refresh.
 
 Progress is saved by replacing the log atomically. If the JSON is damaged,
 VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
@@ -89,9 +97,9 @@ before relying on this change in a deployed service.
 The verified purchase model, official manuals and driver references, current
 software pinout, and physical-validation limits are recorded in the
 [Waveshare hardware reference](docs/hardware/waveshare-7in5-v2.md). Waveshare
-recommends at least 180 seconds between refreshes; VSMP's existing video
-cadence is 120 seconds. Confirm the actual panel revision and long-term display
-quality before changing cadence or enabling revision-specific fast/partial modes.
+recommends at least 180 seconds between refreshes; VSMP's video-frame dwell
+now defaults to 180 seconds. Confirm the actual panel revision and long-term
+display quality before enabling revision-specific fast/partial modes.
 
 Frame packing and SPI block writes reduce Python and GPIO transfer overhead.
 The panel still uses its normal full refresh, including its visible flash.

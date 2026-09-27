@@ -6,8 +6,6 @@ from pathlib import Path
 from tempfile import gettempdir
 from typing import Final
 
-FRAME_DELAY: Final = 120
-
 REPO_PATH: Final = Path(__file__).parents[1]
 
 MEDIA_DIR: Final = REPO_PATH / ".media"
