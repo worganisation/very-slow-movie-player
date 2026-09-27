@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Annotated, Self, cast
+from typing import TYPE_CHECKING, Annotated, Self
 from uuid import UUID  # noqa: TC003 - Pydantic resolves Asset.id at runtime
 
-from httpx import Client, Timeout
+from httpx2 import Client, Timeout
 from pydantic import BaseModel, Field, ValidationError
 from settings import SETTINGS
 from utils import const
@@ -130,10 +130,8 @@ class ImmichAlbum:
         try:
             with self.client.stream("GET", endpoint, params=params) as response:
                 _ = response.raise_for_status()
-                content_type: str = (
-                    cast("str", response.headers.get("content-type", ""))
-                    .split(";", 1)[0]
-                    .lower()
+                content_type = (
+                    response.headers.get("content-type", "").split(";", 1)[0].lower()
                 )
                 if asset.kind == "IMAGE" and not content_type.startswith("image/"):
                     raise ValueError("Immich returned a non-image preview")
