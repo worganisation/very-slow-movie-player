@@ -63,7 +63,7 @@ class LibraryRuntime:
             if len(fields) == JELLYFIN_REQUEST_FIELDS:
                 command.extend(["--audio-language", fields[2]])
         try:
-            self.pending = subprocess.Popen(  # noqa: S603 - fixed module, separate arguments
+            self.pending = subprocess.Popen(  # noqa: S603 - fixed module with separate arguments
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
