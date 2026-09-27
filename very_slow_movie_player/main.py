@@ -301,50 +301,6 @@ def play_video(video_path: Path) -> None:
     set_progress(video_path, frame_count, frame_count)
 
 
-@process_exception(logger=LOGGER)
-def choose_next_video() -> Path | None:
-    """Pick which video to play next.
-
-    Either find one that hasn't yet been finished, or one that hasn't even been started.
-
-    Returns:
-        str: the name of the video file to start playing
-    """
-    log_data = load_progress()
-
-    LOGGER.info("There are %i videos in the log", len(log_data))
-
-    for log_file_path, video in log_data.items():
-        if not Path(log_file_path).is_file():
-            LOGGER.debug("`%s` no longer available", log_file_path)
-            continue
-
-        if (total := video.get("total", -1)) - (
-            current_frame := video.get("current", -1)
-        ) > const.INCREMENT:
-            LOGGER.info(
-                "`%s` has only had %i/%i frames played",
-                log_file_path,
-                current_frame,
-                total,
-            )
-            return Path(log_file_path)
-
-    for file in const.MEDIA_DIR.iterdir():
-        if file.suffix != ".mp4":
-            LOGGER.debug("`%s` is not an mp4", file)
-            continue
-
-        if file.resolve().as_posix() in log_data:
-            LOGGER.debug("`%s` has already been played", file)
-            continue
-
-        LOGGER.info("`%s` hasn't been played yet, returning", file)
-        return file
-
-    return None
-
-
 def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
     """Display one album asset using the existing image and video paths."""
     media = album.download(asset)
