@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from json import dumps, loads
 from math import ceil
 from os import getenv
 from pathlib import Path
 from time import sleep
-from typing import TypedDict
 
 from PIL import Image
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
+from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
 
@@ -23,13 +22,6 @@ LOGGER = get_streaming_logger(__name__)
 
 
 DISPLAY = EPaperDisplay()
-
-
-class ProgressInfo(TypedDict):
-    """Model for the progress info objects in the log."""
-
-    current: int
-    total: int
 
 
 @process_exception(logger=LOGGER)
@@ -119,56 +111,6 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
     letterboxed.save(frame_output_path)
 
     return frame_output_path
-
-
-@process_exception(logger=LOGGER)
-def get_progress(video_path: Path, default: int = 0) -> int:
-    """Get the number of the most recently played frame from the JSON log file.
-
-    This is so we can resume in the case of an early exit.
-
-    Args:
-        video_path (Path): the path to the file being played
-        default (int): a default value to return if the file isn't logged
-
-    Returns:
-        int: the number of the frame that was played most recently
-    """
-    log_data: dict[str, ProgressInfo] = loads(const.PROGRESS_LOG.read_text())
-
-    LOGGER.info("Getting progress for `%s`", video_path)
-
-    try:
-        return log_data[video_path.as_posix()]["current"]
-    except KeyError:
-        return default
-
-
-@process_exception(logger=LOGGER)
-def set_progress(
-    video_path: Path,
-    current_frame: int,
-    frame_count: int | None = None,
-) -> None:
-    """Update the JSON log file, so we can resume if the program is exited.
-
-    Args:
-        video_path (Path): the path to the file being played
-        current_frame (int): which frame has been played most recently
-        frame_count (int): the total number of frames in the video
-    """
-    log_data = loads(const.PROGRESS_LOG.read_text())
-
-    progress = {video_path.as_posix(): {"current": current_frame}}
-
-    LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
-
-    if frame_count:
-        progress[video_path.as_posix()]["total"] = frame_count
-
-    log_data.update(progress)
-
-    const.PROGRESS_LOG.write_text(dumps(log_data, indent=2, sort_keys=True))
 
 
 @process_exception(logger=LOGGER)
@@ -302,7 +244,7 @@ def choose_next_video() -> Path | None:
     Returns:
         str: the name of the video file to start playing
     """
-    log_data: dict[str, ProgressInfo] = loads(const.PROGRESS_LOG.read_text())
+    log_data = load_progress()
 
     LOGGER.info("There are %i videos in the log", len(log_data))
 
@@ -348,10 +290,7 @@ def main() -> None:
     if not video.is_file():
         raise FileNotFoundError(video)
 
-    const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    if not const.PROGRESS_LOG.is_file():
-        LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
-        const.PROGRESS_LOG.write_text("{}")
+    load_progress()
 
     DISPLAY.init()
     try:

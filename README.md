@@ -9,6 +9,10 @@ resume after a restart. The media directory is created on first run. The
 video loops after its final frame. The Google Photos album is no longer
 consulted.
 
+Progress is saved by replacing the log atomically. If the JSON is damaged,
+VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
+warning to the service journal, and starts the video from the beginning.
+
 For example:
 
 ```dotenv
