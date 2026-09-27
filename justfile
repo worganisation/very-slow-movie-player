@@ -20,6 +20,10 @@ sync:
 sync-dev:
     uv sync --frozen --all-groups
 
+# Check source types with the locked development environment
+typecheck:
+    uv run --frozen basedpyright
+
 install-python: sync
 
 # Install the systemd unit without starting the service

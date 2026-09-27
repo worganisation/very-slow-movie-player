@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 from math import ceil
+from math import pow as float_pow
 from os import getenv
 from pathlib import Path
 from time import sleep
@@ -15,8 +16,8 @@ from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
 
-from ffmpeg import input as ffmpeg_input  # type: ignore[attr-defined]
-from ffmpeg import probe  # type: ignore[attr-defined]
+from ffmpeg import input as ffmpeg_input
+from ffmpeg import probe
 
 LOGGER = get_streaming_logger(__name__)
 
@@ -62,7 +63,7 @@ def extract_frame(
     """
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
-    (
+    _ = (
         ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
         .output(str(extract_output_path), vframes=1)
         .overwrite_output()
@@ -135,7 +136,7 @@ def display_image(
         raise ValueError("VSMP_IMAGE_GAMMA must be positive")
     grayscale = Image.open(output_path).convert("L")
     darkened = grayscale.point(
-        [round(255 * (value / 255) ** gamma) for value in range(256)],
+        [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
     )
     pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)
 
@@ -161,6 +162,8 @@ def video_metadata(video_path: Path) -> tuple[int, float]:
 
     fps = 0.0
     for rate in (video_stream.get("avg_frame_rate"), video_stream.get("r_frame_rate")):
+        if rate is None:
+            continue
         try:
             fps = float(Fraction(rate))
         except (TypeError, ValueError, ZeroDivisionError):
@@ -290,9 +293,9 @@ def main() -> None:
     if not video.is_file():
         raise FileNotFoundError(video)
 
-    load_progress()
+    _ = load_progress()
 
-    DISPLAY.init()
+    _ = DISPLAY.init()
     try:
         DISPLAY.clear()
         play_video(video)

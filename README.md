@@ -23,6 +23,11 @@ VSMP_VIDEO_PATH=/home/worgarside/movies/example.mp4
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
 brightness, or increase it for a darker image.
 
+Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
+missing, startup fails so the service does not report a working display that
+is only a software mock. For local development without a panel, set
+`VSMP_ALLOW_MOCK_HARDWARE=true` explicitly.
+
 ## Tooling
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/),
@@ -30,6 +35,7 @@ Requires Python 3.12, [uv](https://docs.astral.sh/uv/),
 
 ```bash
 just sync-dev            # install locked dependencies into .venv
+just typecheck           # check source types with basedpyright
 prek install             # install Git hooks
 prek run --all-files     # run repository checks
 ```
@@ -38,6 +44,10 @@ The systemd unit still launches `.venv/bin/python`. On the Pi, `just sync`
 installs only locked runtime dependencies; `just install-service` installs the
 existing unit, and `just install-all` does both. These recipes do not start the
 service. `just --list` shows the remaining service commands.
+
+If the display's busy signal stays active for more than 30 seconds, playback
+raises an error so systemd can restart the service. Inspect the service journal
+and the display wiring if the error recurs.
 
 ## Release deployment
 
