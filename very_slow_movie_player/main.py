@@ -363,6 +363,8 @@ class PlaybackRuntime:
             candidate = apply_command(self.controls, name, payload)
             if name == "video_path":
                 _ = video_metadata(candidate.video_path)
+            if name == "album":
+                self.validate_album(candidate)
             save_controls(candidate, self.overridden | {name})
         except Exception as exc:  # noqa: BLE001 - invalid input cannot replace good state
             self.mqtt.state("last_error", f"{name}: {exc}"[:255])
@@ -377,6 +379,13 @@ class PlaybackRuntime:
             self.mqtt.state("playback_status", "switching source")
         if name == "album":
             self.next_album_refresh = 0
+
+    @staticmethod
+    def validate_album(candidate: PlaybackControls) -> None:
+        """Accept only albums returned by the configured Immich account."""
+        with ImmichAlbum(candidate.album) as album:
+            if candidate.album not in {row.id for row in album.albums()}:
+                raise ValueError("Immich album is not accessible")
 
     def mark_displayed(
         self,
