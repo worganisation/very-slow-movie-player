@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 from fractions import Fraction
 from itertools import chain
-from math import ceil
+from math import ceil, isfinite
 from math import pow as float_pow
 from os import getenv
 from pathlib import Path
@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from types import FrameType
 
+    from ffmpeg import ProbeInfo, ProbeStream
+
 LOGGER = get_streaming_logger(__name__)
 
 
@@ -42,6 +44,7 @@ def extract_frame(
     frame: int,
     *,
     fps: float,
+    stream_index: int,
     extract_output_path: Path = const.EXTRACT_PATH,
 ) -> Path:
     """Output a frame from the video file to a JPG image.
@@ -67,6 +70,7 @@ def extract_frame(
         video_path (Path): the name of the file to extract the frame from
         frame (int): the number of the frame to extract
         fps (float): the video's frames per second
+        stream_index (int): the selected ffprobe stream's absolute index
         extract_output_path (Path): the path at which to place the extracted image file
 
     Returns:
@@ -95,7 +99,7 @@ def extract_frame(
     try:
         _ = (
             ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
-            .output(str(temporary), vframes=1)
+            .output(str(temporary), vframes=1, map=f"0:{stream_index}")
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
@@ -185,45 +189,65 @@ def display_image(
     sleep(display_time)
 
 
-def video_metadata(video_path: Path) -> tuple[int, float]:
-    """Get the video frame count and frames per second from ffprobe."""
+def usable_frame_rate(stream: ProbeStream) -> float:
+    """Read a positive finite frame rate from ffprobe stream metadata."""
+    for rate in (stream.get("avg_frame_rate"), stream.get("r_frame_rate")):
+        if rate is None:
+            continue
+        try:
+            fps = float(Fraction(rate))
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError):
+            continue
+        if isfinite(fps) and fps > 0:
+            return fps
+    raise RuntimeError("No usable video frame rate found in ffmpeg probe")
+
+
+def usable_frame_count(stream: ProbeStream, info: ProbeInfo, fps: float) -> int:
+    """Read or estimate a positive finite frame count."""
+    raw_frame_count = stream.get("nb_frames")
+    if raw_frame_count is not None and str(raw_frame_count).isdigit():
+        frame_count = int(raw_frame_count)
+        if frame_count == 0:
+            raise RuntimeError("Video stream has zero frames")
+        return frame_count
+
+    duration = stream.get("duration") or info.get("format", {}).get("duration")
+    if duration is None:
+        raise RuntimeError("No video duration found in ffmpeg probe")
+    try:
+        seconds = float(duration)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise RuntimeError("No usable video duration found in ffmpeg probe") from exc
+    estimated_frames = seconds * fps
+    if not isfinite(seconds) or seconds <= 0 or not isfinite(estimated_frames):
+        raise RuntimeError("No usable video duration found in ffmpeg probe")
+    frame_count = ceil(estimated_frames)
+    if frame_count <= 0:
+        raise RuntimeError("Video stream has zero frames")
+    return frame_count
+
+
+def video_metadata(video_path: Path) -> tuple[int, float, int]:
+    """Get a playable video stream's frame count, rate, and absolute index."""
     probe_data = probe(video_path)
     video_stream = next(
         (
             stream
             for stream in probe_data.get("streams", [])
             if stream.get("codec_type") == "video"
+            and stream.get("disposition", {}).get("attached_pic") != 1
         ),
         None,
     )
     if video_stream is None:
-        raise RuntimeError("No video stream found in ffmpeg probe")
+        raise RuntimeError("No playable video stream found in ffmpeg probe")
+    stream_index = video_stream.get("index")
+    if stream_index is None or stream_index < 0:
+        raise RuntimeError("No usable video stream index found in ffmpeg probe")
 
-    fps = 0.0
-    for rate in (video_stream.get("avg_frame_rate"), video_stream.get("r_frame_rate")):
-        if rate is None:
-            continue
-        try:
-            fps = float(Fraction(rate))
-        except (TypeError, ValueError, ZeroDivisionError):
-            continue
-        if fps > 0:
-            break
-    if fps <= 0:
-        raise RuntimeError("No usable video frame rate found in ffmpeg probe")
-
-    raw_frame_count = video_stream.get("nb_frames")
-    if raw_frame_count and str(raw_frame_count).isdigit():
-        frame_count = int(raw_frame_count)
-    else:
-        duration = video_stream.get("duration") or probe_data.get("format", {}).get(
-            "duration",
-        )
-        if duration is None:
-            raise RuntimeError("No video duration found in ffmpeg probe")
-        frame_count = ceil(float(duration) * fps)
-
-    return frame_count, fps
+    fps = usable_frame_rate(video_stream)
+    return usable_frame_count(video_stream, probe_data, fps), fps, stream_index
 
 
 @process_exception(logger=LOGGER)
@@ -241,7 +265,7 @@ def play_video(video_path: Path) -> None:
     if not video_path.is_file():
         raise FileNotFoundError(video_path)
 
-    frame_count, fps = video_metadata(video_path)
+    frame_count, fps, stream_index = video_metadata(video_path)
     LOGGER.info("There are %d frames in this video", frame_count)
 
     if getenv("ALWAYS_RESTART_VIDEOS", "false").lower() == "true":
@@ -270,7 +294,7 @@ def play_video(video_path: Path) -> None:
 
         # Use ffmpeg to extract a frame from the movie, crop it,
         # letterbox it and output it as a JPG
-        output_path = extract_frame(video_path, frame, fps=fps)
+        output_path = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
 
         display_image(output_path)
 
