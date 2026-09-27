@@ -40,10 +40,16 @@ class Settings(BaseSettings):
     mqtt_discovery_prefix: str = "homeassistant"
     mqtt_device_id: str = "vsmp_pi"
     mqtt_device_name: str = "Very Slow Movie Player"
-    vsmp_image_gamma: Annotated[float, Field(gt=0, allow_inf_nan=False)] = 1.7
+    vsmp_image_gamma: Annotated[float, Field(ge=0.1, le=10, allow_inf_nan=False)] = 1.7
     vsmp_video_frame_delay_seconds: Annotated[
-        float, Field(ge=180, allow_inf_nan=False)
+        float, Field(ge=180, le=86400, allow_inf_nan=False)
     ] = 180.0
+    vsmp_photo_frame_delay_seconds: Annotated[
+        float, Field(ge=180, le=86400, allow_inf_nan=False)
+    ] = 300.0
+    vsmp_video_frame_advance: Annotated[int, Field(ge=1, le=100000)] = 12
+    immich_media_type: Literal["photos", "videos", "both"] = "both"
+    vsmp_playback_enabled: bool = True
     always_restart_videos: bool = False
     vsmp_allow_mock_hardware: bool = False
 
