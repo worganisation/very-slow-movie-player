@@ -65,6 +65,7 @@ release its GPIO and SPI resources before exiting.
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/),
 [prek](https://prek.j178.dev/), and [just](https://just.systems/).
+Install native [`ffmpeg` and `ffprobe`](ffmpeg/README.md) for video playback.
 
 ```bash
 just sync-dev            # install locked dependencies into .venv
@@ -81,6 +82,11 @@ service. `just --list` shows the remaining service commands.
 If the display's busy signal stays active for more than 30 seconds, playback
 raises an error so systemd can restart the service. Inspect the service journal
 and the display wiring if the error recurs.
+
+The old Pipenv dependency updater and its cron installer have been removed.
+If they were installed on a Pi, check the `worgarside` user's `crontab -l` and
+remove the entry for `utilities/dep_updater/dep_updater.sh` with `crontab -e`.
+The release deployment workflow installs locked dependencies with uv.
 
 ## Release deployment
 

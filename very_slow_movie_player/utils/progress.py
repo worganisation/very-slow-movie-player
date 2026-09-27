@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from json import JSONDecodeError, dumps, loads
+from json import dumps, loads
 from os import O_DIRECTORY, O_RDONLY, close, fsync
 from os import open as open_fd
 from pathlib import Path
@@ -33,6 +33,24 @@ def _sync_directory(directory: Path) -> None:
         close(directory_fd)
 
 
+def _validate_entry(video_path: object, info: object) -> None:
+    """Check one path and its saved frame counters."""
+    if not isinstance(video_path, str) or not isinstance(info, dict):
+        raise TypeError("Progress entries must map paths to objects")
+    values = cast("dict[object, object]", info)
+    current = values.get("current")
+    if type(current) is not int:
+        raise TypeError("Progress entries need an integer current frame")
+    if current < 0:
+        raise ValueError("Progress entries need a nonnegative current frame")
+    if "total" in values:
+        total = values["total"]
+        if type(total) is not int:
+            raise TypeError("Progress totals must be integers")
+        if total < 0:
+            raise ValueError("Progress totals must be nonnegative")
+
+
 def _validate_progress(data: object) -> dict[str, ProgressInfo]:
     """Reject damaged progress data before it can affect playback."""
     if not isinstance(data, dict):
@@ -40,20 +58,7 @@ def _validate_progress(data: object) -> dict[str, ProgressInfo]:
 
     entries = cast("dict[object, object]", data)
     for video_path, info in entries.items():
-        if not isinstance(video_path, str) or not isinstance(info, dict):
-            raise TypeError("Progress entries must map paths to objects")
-        values = cast("dict[object, object]", info)
-        current = values.get("current")
-        if type(current) is not int:
-            raise TypeError("Progress entries need an integer current frame")
-        if current < 0:
-            raise ValueError("Progress entries need a nonnegative current frame")
-        if "total" in values:
-            total = values["total"]
-            if type(total) is not int:
-                raise TypeError("Progress totals must be integers")
-            if total < 0:
-                raise ValueError("Progress totals must be nonnegative")
+        _validate_entry(video_path, info)
 
     return cast("dict[str, ProgressInfo]", data)
 
@@ -77,7 +82,7 @@ def write_progress(
             temporary_path = Path(temporary_file.name)
             _ = temporary_file.write(dumps(data, indent=2, sort_keys=True))
             temporary_file.flush()
-            _ = fsync(temporary_file.fileno())
+            fsync(temporary_file.fileno())
 
         _ = Path(temporary_path).replace(path)
         _sync_directory(path.parent)
@@ -95,7 +100,7 @@ def load_progress(path: Path = const.PROGRESS_LOG) -> dict[str, ProgressInfo]:
 
     try:
         return _validate_progress(cast("object", loads(path.read_text(encoding="utf-8"))))
-    except (JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as exc:
+    except (TypeError, ValueError) as exc:
         backup = path.with_name(f"{path.name}.corrupt-{time_ns()}")
         _ = path.replace(backup)
         _sync_directory(path.parent)
