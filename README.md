@@ -31,6 +31,7 @@ Requires Python 3.12, [uv](https://docs.astral.sh/uv/),
 
 ```bash
 just sync-dev            # install locked dependencies into .venv
+just typecheck           # check source types with basedpyright
 prek install             # install Git hooks
 prek run --all-files     # run repository checks
 ```

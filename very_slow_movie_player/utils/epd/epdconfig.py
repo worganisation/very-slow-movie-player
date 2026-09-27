@@ -32,37 +32,94 @@ THE SOFTWARE.
 
 from __future__ import annotations
 
-from logging import debug
+from collections.abc import Callable
+from importlib import import_module
+from logging import getLogger
 from os import getenv
 from time import sleep
-from typing import Literal
+from typing import ClassVar, Literal, Protocol, cast
 from unittest.mock import MagicMock
+
+LOGGER = getLogger(__name__)
+
+
+class GPIOInterface(Protocol):
+    """GPIO operations required by the display driver."""
+
+    BCM: int
+    OUT: int
+    IN: int
+
+    def output(self, pin: int, value: int) -> None:
+        """Set a pin high or low."""
+        ...
+
+    def input(self, pin: int) -> int:
+        """Read a pin."""
+        ...
+
+    def setmode(self, _mode: int) -> None:
+        """Select pin-numbering mode."""
+        ...
+
+    def setwarnings(self, value: bool) -> None:  # noqa: FBT001
+        """Enable or disable GPIO warnings."""
+        ...
+
+    def setup(self, pin: int, _direction: int) -> None:
+        """Configure a pin."""
+        ...
+
+    def cleanup(self) -> None:
+        """Release GPIO resources."""
+        ...
+
+
+class SPIInterface(Protocol):
+    """SPI operations required by the display driver."""
+
+    max_speed_hz: int
+    mode: int
+
+    def writebytes(self, data: list[int]) -> None:
+        """Send bytes over SPI."""
+        ...
+
+    def close(self) -> None:
+        """Close the SPI device."""
+        ...
+
+
+type SPIConstructor = Callable[[int, int], SPIInterface]
 
 
 class RaspberryPi:
     """Raspberry Pi configuration."""
 
     # Pin definition
-    RST_PIN = 17
-    DC_PIN = 25
-    CS_PIN = 8
-    BUSY_PIN = 24
+    RST_PIN: ClassVar[int] = 17
+    DC_PIN: ClassVar[int] = 25
+    CS_PIN: ClassVar[int] = 8
+    BUSY_PIN: ClassVar[int] = 24
 
     def __init__(self) -> None:
         try:
-            from RPi import GPIO  # noqa: PLC0415
-            from spidev import SpiDev  # type: ignore[import-not-found] # noqa: PLC0415
-
-            self.gpio = GPIO
+            self.gpio: GPIOInterface = cast(
+                "GPIOInterface",
+                cast("object", import_module("RPi.GPIO")),
+            )
+            spi_device = cast(
+                "SPIConstructor",
+                import_module("spidev").SpiDev,
+            )
 
             # SPI device, bus = 0, device = 0
-            self.spi = SpiDev(0, 0)
+            self.spi: SPIInterface = spi_device(0, 0)
         except ImportError as exc:
             if getenv("VSMP_ALLOW_MOCK_HARDWARE", "false").casefold() != "true":
-                raise RuntimeError(
-                    "Display hardware is unavailable; install RPi.GPIO and spidev, "
-                    "or set VSMP_ALLOW_MOCK_HARDWARE=true for local development",
-                ) from exc
+                message = "Display hardware is unavailable; install RPi.GPIO and spidev, "
+                message += "or set VSMP_ALLOW_MOCK_HARDWARE=true for local development"
+                raise RuntimeError(message) from exc
 
             self.gpio = MagicMock()
             self.spi = MagicMock()
@@ -73,7 +130,7 @@ class RaspberryPi:
 
     def digital_read(self, pin: int) -> bool:
         """Read the value of the pin."""
-        return self.gpio.input(pin)
+        return bool(self.gpio.input(pin))
 
     @staticmethod
     def delay_ms(delay_time: float) -> None:
@@ -98,10 +155,10 @@ class RaspberryPi:
 
     def module_exit(self) -> None:
         """Module exit."""
-        debug("spi end")
+        LOGGER.debug("spi end")
         self.spi.close()
 
-        debug("close 5V, Module enters 0 power consumption ...")
+        LOGGER.debug("close 5V, Module enters 0 power consumption ...")
         self.gpio.output(self.RST_PIN, 0)
         self.gpio.output(self.DC_PIN, 0)
 
