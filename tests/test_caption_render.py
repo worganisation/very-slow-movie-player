@@ -87,8 +87,9 @@ class CaptionRenderTests(unittest.TestCase):
 
     def test_invalid_input_raises(self) -> None:
         """Prevent accidentally bypassing the native panel format."""
+        image = Image.new("RGB", (800, 480))
         with self.assertRaisesRegex(ValueError, "800x480 mode 1 or L"):
-            render_caption(Image.new("RGB", (800, 480)), "Hello")
+            render_caption(image, "Hello")
 
 
 if __name__ == "__main__":

@@ -488,42 +488,7 @@ class PlaybackRuntime:
             self.process_commands()
             if self.selection != selection:
                 return False
-            if (
-                self.controls.playback_enabled
-                and "redisplay" in self.buttons
-                and self.current_path is not None
-                and self._minimum_wait() <= 0
-            ):
-                self.buttons.discard("redisplay")
-                image_path = self.current_path
-                if self.current_video is not None:
-                    source, frame, fps, stream_index, start_time = self.current_video
-                    image_path = extract_frame(
-                        source,
-                        frame,
-                        fps=fps,
-                        stream_index=stream_index,
-                        start_time=start_time,
-                    )
-                caption = ""
-                if self.current_video is not None:
-                    _, frame, fps, _, _ = self.current_video
-                    caption = self.caption_text(frame / fps)
-                display_image(
-                    image_path,
-                    self.controls.gamma,
-                    self.mqtt,
-                    caption=caption,
-                    controls=self.controls,
-                )
-                self.mark_displayed(
-                    image_path,
-                    self.current_media,
-                    self.current_frame,
-                    self.current_frame_count,
-                    kind=self.current_kind,
-                    video_frame=self.current_video,
-                )
+            if self.redisplay_if_ready():
                 continue
             if (
                 self.controls.playback_enabled
@@ -546,6 +511,41 @@ class PlaybackRuntime:
                     ).isoformat(),
                 )
             _ = self.mailbox.wake.wait(timeout=max(0.05, min(remaining, 60)))
+
+    def redisplay_if_ready(self) -> bool:
+        """Recompose the last frame when requested and the panel dwell has elapsed."""
+        if not (
+            self.controls.playback_enabled
+            and "redisplay" in self.buttons
+            and self.current_path is not None
+            and self._minimum_wait() <= 0
+        ):
+            return False
+        self.buttons.discard("redisplay")
+        image_path = self.current_path
+        caption = ""
+        if self.current_video is not None:
+            source, frame, fps, stream_index, start_time = self.current_video
+            image_path = extract_frame(
+                source, frame, fps=fps, stream_index=stream_index, start_time=start_time
+            )
+            caption = self.caption_text(frame / fps)
+        display_image(
+            image_path,
+            self.controls.gamma,
+            self.mqtt,
+            caption=caption,
+            controls=self.controls,
+        )
+        self.mark_displayed(
+            image_path,
+            self.current_media,
+            self.current_frame,
+            self.current_frame_count,
+            kind=self.current_kind,
+            video_frame=self.current_video,
+        )
+        return True
 
     def caption_text(self, timestamp: float) -> str:
         """Resolve captions only for selected offline library media."""
@@ -774,7 +774,10 @@ def main() -> None:
         previous_error = active_exception()
         _ = signal(SIGTERM, SIG_IGN)
         try:
-            runtime.library.close()
+            try:
+                runtime.library.close()
+            except Exception as exc:  # noqa: BLE001 - always finish hardware cleanup
+                logger.warning("Import worker shutdown failed: {}", type(exc).__name__)
             if mqtt_started:
                 runtime.mqtt.stop()
             if DISPLAY.pi.module_initialized:
