@@ -7,13 +7,13 @@ license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "rpi-gpio; sys_platform == 'linux'",
-  "pillow",
-  "spidev; sys_platform == 'linux'",
-  "ffmpeg-python",
-  "wg-utilities[clients,devices-epd,exceptions]>=5.15.3,<6",
-  "pydantic",
-  "httpx>=0.27.2,<0.28",
+  "rpi-gpio>=0.7.1,<1; sys_platform == 'linux'",
+  "pillow>=12.3.0,<13",
+  "spidev>=3.8,<4; sys_platform == 'linux'",
+  "ffmpeg-python>=0.2.0,<0.3",
+  "wg-utilities[loggers]>=5.17.4,<6",
+  "pydantic>=2.13.5,<3",
+  "httpx>=0.28.1,<0.29",
   "youtube-dl-nightly>=2024.8.7,<2025",
 ]
 

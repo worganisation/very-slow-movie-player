@@ -136,8 +136,6 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
 
     with Image.open(image_path) as source:
         oriented = ImageOps.exif_transpose(source)
-        if oriented is None:
-            raise RuntimeError("Could not orient the input image")
         with oriented:
             scale_factor = min(
                 DISPLAY.WIDTH / oriented.width,
@@ -151,7 +149,7 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
             )
             with (
                 Image.new("RGB", (DISPLAY.WIDTH, DISPLAY.HEIGHT)) as letterboxed,
-                oriented.resize(
+                oriented.resize(  # pyright: ignore[reportUnknownMemberType]
                     (resize_width, resize_height), Resampling.LANCZOS
                 ) as resized,
             ):
@@ -184,7 +182,7 @@ def display_image(
     with (
         Image.open(output_path) as formatted,
         formatted.convert("L") as grayscale,
-        grayscale.point(
+        grayscale.point(  # pyright: ignore[reportUnknownMemberType]
             [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
         ) as darkened,
         darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
