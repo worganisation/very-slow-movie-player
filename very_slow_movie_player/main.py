@@ -9,8 +9,10 @@ from math import ceil
 from math import pow as float_pow
 from os import getenv
 from pathlib import Path
+from signal import SIG_IGN, SIGTERM, signal
+from sys import exception as active_exception
 from time import sleep
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from immich import Asset, ImmichAlbum
 from PIL import Image
@@ -25,6 +27,7 @@ from ffmpeg import probe
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from types import FrameType
 
 LOGGER = get_streaming_logger(__name__)
 
@@ -298,8 +301,36 @@ def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
         display_image(media, 300)
 
 
+def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> NoReturn:
+    """Let Python unwind display cleanup when systemd stops the service."""
+    _ = signal(SIGTERM, SIG_IGN)
+    raise SystemExit(0)
+
+
+def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None) -> None:
+    """Release GPIO and SPI without hiding the original playback failure."""
+    cleanup_error: BaseException | None = None
+    if enter_sleep:
+        try:
+            DISPLAY.sleep()
+        except BaseException as exc:  # noqa: BLE001 - preserve cleanup on SIGTERM
+            cleanup_error = exc
+    try:
+        DISPLAY.pi.module_exit()
+    except BaseException as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+        else:
+            LOGGER.exception("Additional failure releasing display hardware")
+    if cleanup_error is not None:
+        if previous_error is not None:
+            LOGGER.error("Display cleanup also failed: %s", cleanup_error)
+        else:
+            raise cleanup_error
+
+
 @process_exception(logger=LOGGER)
-def main() -> None:
+def main() -> None:  # noqa: PLR0912 - source preparation and hardware lifecycle
     """Play a configured local video, or assets from an Immich album."""
     source = getenv("VSMP_SOURCE", "local").casefold()
     if source not in {"local", "immich"}:
@@ -327,8 +358,11 @@ def main() -> None:
 
         _ = load_progress()
 
-        _ = DISPLAY.init()
+        previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
+        display_initialized = False
         try:
+            _ = DISPLAY.init()
+            display_initialized = True
             DISPLAY.clear()
             if video is not None:
                 play_video(video)
@@ -338,8 +372,16 @@ def main() -> None:
             else:
                 raise RuntimeError("No playback source was prepared")
         finally:
-            DISPLAY.sleep()
-            DISPLAY.pi.module_exit()
+            previous_error = active_exception()
+            _ = signal(SIGTERM, SIG_IGN)
+            try:
+                if DISPLAY.pi.module_initialized:
+                    clean_up_display(
+                        enter_sleep=display_initialized,
+                        previous_error=previous_error,
+                    )
+            finally:
+                _ = signal(SIGTERM, previous_sigterm_handler)
 
 
 if __name__ == "__main__":

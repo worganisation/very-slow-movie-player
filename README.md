@@ -58,6 +58,8 @@ Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
 missing, startup fails so the service does not report a working display that
 is only a software mock. For local development without a panel, set
 `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly.
+On service stop or playback failure, VSMP attempts to sleep the display and
+release its GPIO and SPI resources before exiting.
 
 ## Tooling
 
