@@ -23,6 +23,7 @@ brightness, or increase it for a darker image.
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/),
 [prek](https://prek.j178.dev/), and [just](https://just.systems/).
+Install native [`ffmpeg` and `ffprobe`](ffmpeg/README.md) for video playback.
 
 ```bash
 just sync-dev            # install locked dependencies into .venv
