@@ -20,7 +20,7 @@ frame progress, and caption selection subsequently work without either source
 server. The selected ID and caption controls persist in the existing SQLite state.
 CLI imports appear in HA on the next playback control poll (within 60 seconds).
 
-**Captions enabled**, **Caption style**, **Caption font**, **Caption font size**,
+**Captions enabled**, **Caption style**, **Caption background**, **Caption font**, **Caption font size**,
 and **Caption timing offset** are confirmed-state controls. Positive offsets delay
 captions. The cue is selected at the extracted frame's media timestamp, not the
 wall clock; silence remains blank. Changes apply on the next refresh; use Redisplay
@@ -32,7 +32,8 @@ and is blank for silence, disabled captions, or a caption rendering failure.
 and is blank for photos. Both update only after a successful panel refresh.
 
 The initial style is 26px serif text in a 96px light margin. The full photo fits
-above the margin without cropping. Overlay uses light text on a dark band. Photo
+above the margin without cropping. Background is independently selectable for
+both margin and overlay: `light` uses dark text, `dark` uses light text. Photo
 gamma is applied before scaling/dithering and caption glyphs stay crisp. Text wraps
 to at most two lines, shrinking only to 16px. An oversized caption or missing system
 font leaves the photo visible and reports **Caption error**, rather than truncating
@@ -42,6 +43,7 @@ See [native monochrome samples](caption-samples/README.md).
 New environment defaults are `VSMP_LIBRARY_PATH` (absolute; default
 `~/vsmp-library`), `VSMP_CAPTION_LANGUAGE=en`, `VSMP_ASR_BACKEND=disabled`,
 `VSMP_CAPTIONS_ENABLED=true`, `VSMP_CAPTION_STYLE=margin`,
+`VSMP_CAPTION_BACKGROUND=light`,
 `VSMP_CAPTION_FONT=serif`, `VSMP_CAPTION_FONT_SIZE=26`, and
 `VSMP_CAPTION_OFFSET=0`. Jellyfin URL, API key and user ID must be configured together.
 All configured values are validated at startup, including in other source modes.

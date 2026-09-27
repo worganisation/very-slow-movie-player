@@ -56,6 +56,7 @@ def main() -> None:
             frame,
             "For a moment, the whole world seemed to stand still.",
             style="overlay",
+            background="dark",
             font="sans",
         ),
     }

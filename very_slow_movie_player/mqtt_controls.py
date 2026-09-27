@@ -26,6 +26,7 @@ ENTITY_ICONS = {
     "album": "mdi:image-album",
     "library_id": "mdi:movie-open",
     "caption_style": "mdi:format-text-wrapping-wrap",
+    "caption_background": "mdi:contrast-box",
     "caption_font": "mdi:format-font",
     "import_youtube": "mdi:youtube",
     "import_jellyfin": "mdi:movie-open-plus",
@@ -197,6 +198,7 @@ class HAClient:
             ("source", "Source", ["local", "immich", "library"]),
             ("media_type", "Immich media type", ["photos", "videos", "both"]),
             ("caption_style", "Caption style", ["margin", "overlay"]),
+            ("caption_background", "Caption background", ["light", "dark"]),
             ("caption_font", "Caption font", ["serif", "sans"]),
         ):
             self._entity(
