@@ -10,11 +10,8 @@ from tempfile import NamedTemporaryFile
 from time import time_ns
 from typing import NotRequired, TypedDict, cast
 
-from wg_utilities.loggers import get_streaming_logger
-
 from . import const
-
-LOGGER = get_streaming_logger(__name__)
+from .logging import logger
 
 
 class ProgressInfo(TypedDict):
@@ -94,7 +91,7 @@ def write_progress(
 def load_progress(path: Path = const.PROGRESS_LOG) -> dict[str, ProgressInfo]:
     """Load progress, preserving a damaged log before starting a fresh one."""
     if not path.is_file():
-        LOGGER.warning("Progress log not found at `%s`", path)
+        logger.warning("Progress log not found at `{}`", path)
         write_progress({}, path)
         return {}
 
@@ -104,14 +101,14 @@ def load_progress(path: Path = const.PROGRESS_LOG) -> dict[str, ProgressInfo]:
         backup = path.with_name(f"{path.name}.corrupt-{time_ns()}")
         _ = path.replace(backup)
         _sync_directory(path.parent)
-        LOGGER.warning("Invalid progress log preserved at `%s`: %s", backup, exc)
+        logger.warning("Invalid progress log preserved at `{}`: {}", backup, exc)
         write_progress({}, path)
         return {}
 
 
 def get_progress(video_path: Path, default: int = 0) -> int:
     """Return the last displayed frame, or the default for a new video."""
-    LOGGER.info("Getting progress for `%s`", video_path)
+    logger.info("Getting progress for `{}`", video_path)
     progress = load_progress().get(video_path.as_posix())
     return progress["current"] if progress is not None else default
 
@@ -130,6 +127,6 @@ def set_progress(
     if frame_count is not None:
         progress["total"] = frame_count
 
-    LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
+    logger.debug("Updating log for `{}` to frame #{}", video_path, current_frame)
     log_data[video_path.as_posix()] = progress
     write_progress(log_data)

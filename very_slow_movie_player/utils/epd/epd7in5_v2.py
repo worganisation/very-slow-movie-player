@@ -31,16 +31,14 @@ THE SOFTWARE.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from logging import getLogger
 from sys import exception as active_exception
 from time import monotonic, sleep
 from typing import TYPE_CHECKING, Final, Literal
 
 from PIL.Image import Transpose
+from utils.logging import logger
 
 from .epdconfig import RaspberryPi
-
-LOGGER = getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -100,7 +98,7 @@ class EPaperDisplay:
 
     def read_busy(self) -> None:
         """Read the busy signal."""
-        LOGGER.debug("e-Paper busy")
+        logger.debug("e-Paper busy")
 
         deadline = monotonic() + self.BUSY_TIMEOUT_SECONDS
         self.send_command(0x71)
@@ -151,7 +149,7 @@ class EPaperDisplay:
             except BaseException:
                 if previous_error is None:
                     raise
-                LOGGER.exception("E-paper power-off also failed")
+                logger.exception("E-paper power-off also failed")
 
     def init(self) -> int:
         """Initialize the display."""
