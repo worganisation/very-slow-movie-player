@@ -43,7 +43,7 @@ ENTITY_ICONS = {
     "redisplay": "mdi:refresh",
     "restart_video": "mdi:restart",
     "current_caption": "mdi:closed-caption-outline",
-    "video_timestamp": "mdi:movie-open-clock",
+    "video_timestamp": "mdi:timer-outline",
     "caption_error": "mdi:comment-alert-outline",
     "import_status": "mdi:download-circle-outline",
     "import_error": "mdi:alert-circle-outline",
