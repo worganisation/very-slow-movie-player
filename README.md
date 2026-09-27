@@ -59,9 +59,12 @@ frames per update. The startup clear is a separate panel operation; the
 playback scheduler enforces at least 180 seconds between completed frame
 refreshes, including button requests.
 
-Progress is saved by replacing the log atomically. If the JSON is damaged,
-VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
-warning to the service journal, and starts the video from the beginning.
+Progress is saved per video in `.media/state.sqlite3`. On first startup, VSMP
+imports an existing `.media/progress_log.json` and `.media/ha_controls.json` in
+one transaction. The original JSON files remain untouched as recovery copies.
+Invalid JSON or invalid values stop startup and roll back the import; repair the
+file and restart. Once the database has schema version 1, the JSON files are
+ignored, so stale copies cannot overwrite newer playback or control state.
 
 Set `VSMP_SOURCE=local` in the complete configuration above.
 
@@ -149,14 +152,19 @@ permissions listed above. Broker outages do not stop playback. The most recent
 successfully displayed frame is republished when MQTT reconnects.
 
 The service eagerly validates the entire `.env` configuration, including
-inactive sources. Home Assistant changes are persisted atomically as non-secret
-overrides in `very_slow_movie_player/.media/ha_controls.json` on the Pi. Systemd
-environment overrides `.env`; only keys present in `ha_controls.json` override
-those validated environment defaults. Remove one key from this file while the
-service is stopped to restore its environment value, or remove the file to
-restore all environment defaults. Keep the file and `.env` private. A malformed
-or invalid override file stops startup so an operator can repair it safely.
-Never put the Immich API key, broker password, or other secrets in that file.
+inactive sources. Home Assistant changes persist only explicit non-secret
+overrides in `very_slow_movie_player/.media/state.sqlite3` on the Pi. Systemd
+environment overrides `.env`; database overrides take precedence only for their
+named settings. To restore an environment value, stop the service and delete its
+row from `control_overrides` using `sqlite3`, or delete all rows to restore all
+environment defaults. Back up the database before editing it. A malformed or
+invalid override stops startup for repair. Keep the database and `.env` private;
+never place the Immich API key, broker password, or other secrets in either
+override storage or the legacy JSON files. SQLite `PRAGMA user_version` records
+the schema; an unknown version stops startup. To recover from database damage,
+stop the service, preserve the database for diagnosis, then restore a backup.
+The preserved JSON copies can seed a fresh database, but reflect only their
+original import-time state.
 
 For authenticated MQTT, set both `MQTT_USERNAME` and `MQTT_PASSWORD`; for TLS,
 set `MQTT_TLS=true` and the broker port. The system CA store verifies the broker

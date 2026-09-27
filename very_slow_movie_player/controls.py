@@ -3,119 +3,71 @@
 from __future__ import annotations
 
 from json import dumps, loads
-from os import R_OK, access, fsync
-from pathlib import Path
-from tempfile import NamedTemporaryFile
 from threading import Event, Lock
-from typing import Annotated, Literal, cast
+from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
-from settings import SETTINGS
-from utils.const import MEDIA_DIR
+from control_model import BUTTON_NAMES, CONTROL_NAMES, PlaybackControls
+from pydantic import ValidationError
+from storage import connect, initialize
 
-CONTROL_FILE = MEDIA_DIR / "ha_controls.json"
-CONTROL_NAMES = frozenset({
-    "source",
-    "playback_enabled",
-    "video_interval",
-    "photo_interval",
-    "frame_advance",
-    "gamma",
-    "video_path",
-    "album",
-    "media_type",
-    "always_restart_videos",
-})
-BUTTON_NAMES = frozenset({"next", "redisplay", "restart_video"})
+__all__ = [
+    "BUTTON_NAMES",
+    "CONTROL_NAMES",
+    "CommandMailbox",
+    "PlaybackControls",
+    "apply_command",
+    "load_controls",
+    "save_controls",
+]
 
 
-class PlaybackControls(BaseModel):
-    """Only non-secret settings exposed to Home Assistant."""
-
-    source: Literal["local", "immich"]
-    playback_enabled: bool
-    video_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
-    photo_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
-    frame_advance: Annotated[int, Field(ge=1, le=100000)]
-    gamma: Annotated[float, Field(ge=0.1, le=10, allow_inf_nan=False)]
-    video_path: Path
-    album: UUID
-    media_type: Literal["photos", "videos", "both"]
-    always_restart_videos: bool
-
-    @field_validator("video_path")
-    @classmethod
-    def readable_video(cls, value: Path) -> Path:
-        """Reject missing, relative, or unreadable paths for either source."""
-        _ = cls
-        path = value.expanduser()
-        if not path.is_absolute() or not path.is_file() or not access(path, R_OK):
-            raise ValueError("video_path must be an existing readable absolute file")
-        return path
-
-    @classmethod
-    def defaults(cls) -> PlaybackControls:
-        """Construct complete defaults from eagerly validated environment settings."""
-        return cls(
-            source=SETTINGS.vsmp_source,
-            playback_enabled=SETTINGS.vsmp_playback_enabled,
-            video_interval=SETTINGS.vsmp_video_frame_delay_seconds,
-            photo_interval=SETTINGS.vsmp_photo_frame_delay_seconds,
-            frame_advance=SETTINGS.vsmp_video_frame_advance,
-            gamma=SETTINGS.vsmp_image_gamma,
-            video_path=SETTINGS.vsmp_video_path,
-            album=SETTINGS.immich_album_id,
-            media_type=SETTINGS.immich_media_type,
-            always_restart_videos=SETTINGS.always_restart_videos,
-        )
-
-
-def load_controls(path: Path = CONTROL_FILE) -> tuple[PlaybackControls, set[str]]:
-    """Overlay validated, persisted HA values on complete environment defaults."""
+def load_controls() -> tuple[PlaybackControls, set[str]]:
+    """Overlay explicit HA overrides on eagerly validated environment defaults."""
     defaults = PlaybackControls.defaults()
-    if not path.exists():
-        return defaults, set()
-    raw = cast("object", loads(path.read_text(encoding="utf-8")))
-    if not isinstance(raw, dict):
-        raise TypeError("Invalid persisted HA controls")
-    overrides = cast("dict[object, object]", raw)
-    if not all(isinstance(key, str) and key in CONTROL_NAMES for key in overrides):
-        raise ValueError("Invalid persisted HA controls")
-    controls = PlaybackControls.model_validate({
-        **defaults.model_dump(),
-        **cast("dict[str, object]", overrides),
-    })
-    return controls, set(cast("dict[str, object]", overrides))
-
-
-def save_controls(
-    controls: PlaybackControls, overridden: set[str], path: Path = CONTROL_FILE
-) -> None:
-    """Replace the override file atomically after successful validation."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path | None = None
+    initialize()
+    connection = connect()
     try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=".ha_controls-",
-            delete=False,
-        ) as output:
-            temporary = Path(output.name)
-            Path(temporary).chmod(0o600)
-            values = controls.model_dump(mode="json")
-            _ = output.write(
-                dumps({key: values[key] for key in overridden}, separators=(",", ":"))
-            )
-            output.flush()
-            fsync(output.fileno())
-        _ = temporary.replace(path)
-        temporary = None
+        rows = cast(
+            "list[tuple[str, str]]",
+            connection.execute("SELECT name, value FROM control_overrides").fetchall(),
+        )
+        overrides = {name: loads(value) for name, value in rows}
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        connection.close()
+    if not all(name in CONTROL_NAMES for name in overrides):
+        raise ValueError("Invalid persisted HA controls")
+    return PlaybackControls.model_validate({**defaults.model_dump(), **overrides}), set(
+        overrides
+    )
+
+
+def save_controls(controls: PlaybackControls, overridden: set[str]) -> None:
+    """Save only explicit overrides in one short transaction."""
+    if not overridden <= CONTROL_NAMES:
+        raise ValueError("Invalid HA control override names")
+    initialize()
+    values = controls.model_dump(mode="json")
+    connection = connect()
+    try:
+        with connection:
+            rows = cast(
+                "list[tuple[str]]",
+                connection.execute("SELECT name FROM control_overrides").fetchall(),
+            )
+            existing = {row[0] for row in rows}
+            _ = connection.executemany(
+                "DELETE FROM control_overrides WHERE name = ?",
+                ((name,) for name in existing - overridden),
+            )
+            _ = connection.executemany(
+                """INSERT INTO control_overrides(name, value) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET value=excluded.value
+                WHERE value IS NOT excluded.value""",
+                ((key, dumps(values[key])) for key in overridden),
+            )
+    finally:
+        connection.close()
 
 
 class CommandMailbox:
