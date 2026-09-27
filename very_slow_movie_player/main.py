@@ -498,19 +498,21 @@ class PlaybackRuntime:
             if self.controls.playback_enabled and self._normal_wait() <= 0:
                 self.mqtt.state("next_refresh", "None")
                 return True
-            remaining = self._minimum_wait() if self.buttons else self._normal_wait()
-            if not self.controls.playback_enabled:
-                self.mqtt.state("playback_status", "paused")
-                self.mqtt.state("next_refresh", "None")
-                remaining = 60
-            elif self.last_panel_refresh is not None:
-                self.mqtt.state(
-                    "next_refresh",
-                    (
-                        datetime.now(UTC) + timedelta(seconds=max(0, remaining))
-                    ).isoformat(),
-                )
-            _ = self.mailbox.wake.wait(timeout=max(0.05, min(remaining, 60)))
+            self.wait_for_refresh()
+
+    def wait_for_refresh(self) -> None:
+        """Publish the next wake time and wait for commands or the playback clock."""
+        remaining = self._minimum_wait() if self.buttons else self._normal_wait()
+        if not self.controls.playback_enabled:
+            self.mqtt.state("playback_status", "paused")
+            self.mqtt.state("next_refresh", "None")
+            remaining = 60
+        elif self.last_panel_refresh is not None:
+            self.mqtt.state(
+                "next_refresh",
+                (datetime.now(UTC) + timedelta(seconds=max(0, remaining))).isoformat(),
+            )
+        _ = self.mailbox.wake.wait(timeout=max(0.05, min(remaining, 60)))
 
     def redisplay_if_ready(self) -> bool:
         """Recompose the last frame when requested and the panel dwell has elapsed."""
