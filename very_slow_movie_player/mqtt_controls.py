@@ -20,6 +20,45 @@ if TYPE_CHECKING:
     from paho.mqtt.reasoncodes import ReasonCode
 
 
+ENTITY_ICONS = {
+    "source": "mdi:video-input-component",
+    "media_type": "mdi:file-image",
+    "album": "mdi:image-album",
+    "library_id": "mdi:movie-open",
+    "caption_style": "mdi:format-text-wrapping-wrap",
+    "caption_font": "mdi:format-font",
+    "import_youtube": "mdi:youtube",
+    "import_jellyfin": "mdi:movie-open-plus",
+    "video_interval": "mdi:timer-outline",
+    "photo_interval": "mdi:timer-outline",
+    "frame_advance": "mdi:fast-forward",
+    "gamma": "mdi:brightness-6",
+    "caption_font_size": "mdi:format-size",
+    "caption_offset": "mdi:timer-sync-outline",
+    "captions_enabled": "mdi:closed-caption",
+    "playback_enabled": "mdi:play-pause",
+    "always_restart_videos": "mdi:restart",
+    "video_path": "mdi:file-video",
+    "next": "mdi:skip-next",
+    "redisplay": "mdi:refresh",
+    "restart_video": "mdi:restart",
+    "current_caption": "mdi:closed-caption-outline",
+    "video_timestamp": "mdi:movie-open-clock",
+    "caption_error": "mdi:comment-alert-outline",
+    "import_status": "mdi:download-circle-outline",
+    "import_error": "mdi:alert-circle-outline",
+    "import_progress": "mdi:progress-download",
+    "playback_status": "mdi:play-circle-outline",
+    "current_media": "mdi:movie-open",
+    "video_current_frame": "mdi:filmstrip",
+    "video_frame_count": "mdi:filmstrip-box-multiple",
+    "last_refresh": "mdi:check-circle-outline",
+    "next_refresh": "mdi:clock-outline",
+    "last_error": "mdi:alert-circle-outline",
+    "displayed_frame": "mdi:image-frame",
+}
+
+
 class HAClient:
     """Keep MQTT connected throughout waits and reconnect after outages."""
 
@@ -131,6 +170,7 @@ class HAClient:
         object_id = f"vsmp_{self.device_id}_{name}"
         config = {
             "name": label,
+            "icon": ENTITY_ICONS[name],
             "unique_id": object_id,
             "device": {
                 "identifiers": [f"vsmp_{self.device_id}"],
