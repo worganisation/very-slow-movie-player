@@ -86,8 +86,10 @@ refresh. This keeps the displayed image and controller registers without
 holding drive voltage throughout the pause. Command-order checks are
 hardware-free; verify image quality and power behavior on the physical panel
 before relying on this change in a deployed service.
-The [Waveshare V2 specification](https://files.waveshare.com/upload/6/60/7.5inch_e-Paper_V2_Specification.pdf)
-recommends at least 180 seconds between full updates; VSMP's existing video
+The verified purchase model, official manuals and driver references, current
+software pinout, and physical-validation limits are recorded in the
+[Waveshare hardware reference](docs/hardware/waveshare-7in5-v2.md). Waveshare
+recommends at least 180 seconds between refreshes; VSMP's existing video
 cadence is 120 seconds. Confirm the actual panel revision and long-term display
 quality before changing cadence or enabling revision-specific fast/partial modes.
 
