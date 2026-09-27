@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from fractions import Fraction
+from io import BytesIO
 from itertools import chain
 from math import ceil, isfinite
 from math import pow as float_pow
@@ -15,6 +16,7 @@ from time import sleep
 from typing import TYPE_CHECKING, NoReturn
 
 from immich import Asset, ImmichAlbum
+from mqtt_image import publish_displayed_image
 from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
 from settings import SETTINGS
@@ -186,8 +188,15 @@ def display_image(
         darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
     ):
         buffer = DISPLAY.getbuffer(monochrome)
-
-    DISPLAY.display(buffer)
+        DISPLAY.display(buffer)
+        try:
+            with BytesIO() as png:
+                monochrome.save(png, format="PNG")
+                publish_displayed_image(png.getvalue())
+        except Exception as exc:  # noqa: BLE001 - reporting must not interrupt playback
+            LOGGER.warning(
+                "MQTT image update failed after display: %s", type(exc).__name__
+            )
 
     sleep(display_time)
 
