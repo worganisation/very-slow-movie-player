@@ -1,4 +1,6 @@
 *.env
+ffmpeg/ffmpeg
+ffmpeg/ffprobe
 .media/
 !sample.env
 *.zip
