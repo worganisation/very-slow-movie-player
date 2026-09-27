@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
     from library import LibraryItem, MediaLibrary
 
+type JsonObject = dict[str, object]
+type JsonArray = list[object]
+_ENV_EXECUTABLE = "/usr/bin/env"
+
 _TEXT_CODECS = {"ass", "ssa", "srt", "subrip", "vtt", "webvtt"}
 
 
@@ -113,8 +117,8 @@ class ImportService:
         if not isinstance(items, list):
             raise TypeError("Invalid Jellyfin search response")
         entries = [
-            cast("dict[str, object]", entry)
-            for entry in cast("list[object]", items)
+            cast("JsonObject", entry)
+            for entry in cast("JsonArray", items)
             if isinstance(entry, dict)
         ]
         return [
@@ -131,8 +135,8 @@ class ImportService:
         if not isinstance(sources, list):
             raise TypeError("Jellyfin item has invalid media sources")
         entries = [
-            cast("dict[str, object]", source)
-            for source in cast("list[object]", sources)
+            cast("JsonObject", source)
+            for source in cast("JsonArray", sources)
             if isinstance(source, dict)
         ]
         return [source for source in entries if source.get("Id")]
@@ -158,24 +162,14 @@ class ImportService:
         if metadata.get("Type") not in {"Movie", "Episode"}:
             raise ValueError("Only Jellyfin films and episodes can be imported")
         sources = self.jellyfin_versions(item_id)
-        if media_source_id is None and len(sources) != 1:
-            raise ValueError("Specify media_source_id for an item with multiple versions")
-        source = (
-            next((entry for entry in sources if entry.get("Id") == media_source_id), None)
-            if media_source_id
-            else sources[0]
-            if sources
-            else None
-        )
-        if source is None:
-            raise ValueError("Jellyfin media source was not found")
+        source = self._select_jellyfin_source(sources, media_source_id)
         source_id = str(source["Id"])
         streams = source.get("MediaStreams", [])
         if not isinstance(streams, list):
             raise TypeError("Invalid Jellyfin media streams")
-        typed_streams = cast("list[object]", streams)
+        typed_streams = cast("JsonArray", streams)
         dictionaries = [
-            cast("dict[str, object]", stream)
+            cast("JsonObject", stream)
             for stream in typed_streams
             if isinstance(stream, dict)
         ]
@@ -212,6 +206,23 @@ class ImportService:
         except Exception as exc:
             self.library.fail(item.id, self._safe_error(exc))
             raise
+
+    @staticmethod
+    def _select_jellyfin_source(
+        sources: list[JsonObject], media_source_id: str | None
+    ) -> JsonObject:
+        if media_source_id is None:
+            if len(sources) != 1:
+                raise ValueError(
+                    "Specify media_source_id for an item with multiple versions"
+                )
+            return sources[0]
+        source = next(
+            (entry for entry in sources if entry.get("Id") == media_source_id), None
+        )
+        if source is None:
+            raise ValueError("Jellyfin media source was not found")
+        return source
 
     @staticmethod
     def _choose_audio(
@@ -256,9 +267,7 @@ class ImportService:
         stage: Path,
         audio: dict[str, object] | None,
     ) -> tuple[Path | None, str | None]:
-        dictionaries = [
-            cast("dict[str, object]", s) for s in streams if isinstance(s, dict)
-        ]
+        dictionaries = [cast("JsonObject", s) for s in streams if isinstance(s, dict)]
         candidates = [
             s
             for s in dictionaries
@@ -276,47 +285,8 @@ class ImportService:
         )
         errors: list[str] = []
         for candidate in candidates:
-            codec = str(candidate.get("Codec") or "").casefold()
             try:
-                if candidate.get("DeliveryUrl"):
-                    text = self._jf_text(str(candidate["DeliveryUrl"]))
-                    fmt = (
-                        "srt"
-                        if codec == "subrip" or "srt" in str(candidate["DeliveryUrl"])
-                        else codec
-                    )
-                elif candidate.get("IsExternal"):
-                    index = int(str(candidate["Index"]))
-                    text = self._jf_text(
-                        f"/Videos/{item_id}/{source_id}/Subtitles/{index}/0/Stream.srt"
-                    )
-                    fmt = "srt"
-                else:
-                    index = int(str(candidate["Index"]))
-                    result = subprocess.run(
-                        [
-                            "/usr/bin/env",
-                            "ffmpeg",
-                            "-v",
-                            "error",
-                            "-copyts",
-                            "-i",
-                            str(video),
-                            "-map",
-                            f"0:{index}",
-                            "-f",
-                            "srt",
-                            "-",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                        timeout=180,
-                    )
-                    text, fmt = result.stdout, "srt"
-                cues = normalize_subtitles(text, fmt)
-                if not candidate.get("DeliveryUrl") and not candidate.get("IsExternal"):
-                    cues = self._relative_cues(cues, self._video_origin(video))
+                cues = self._read_jellyfin_cues(item_id, source_id, candidate, video)
                 if cues:
                     return self._save_track(
                         stage,
@@ -335,6 +305,44 @@ class ImportService:
                 errors.append(self._safe_error(exc))
         return self._asr_or_missing(video, stage, audio, errors)
 
+    def _read_jellyfin_cues(
+        self, item_id: str, source_id: str, candidate: JsonObject, video: Path
+    ) -> list[CaptionCue]:
+        codec = str(candidate.get("Codec") or "").casefold()
+        delivery = candidate.get("DeliveryUrl")
+        if delivery:
+            text = self._jf_text(str(delivery))
+            fmt = "srt" if codec == "subrip" or "srt" in str(delivery) else codec
+            return normalize_subtitles(text, fmt)
+        index = int(str(candidate["Index"]))
+        if candidate.get("IsExternal"):
+            text = self._jf_text(
+                f"/Videos/{item_id}/{source_id}/Subtitles/{index}/0/Stream.srt"
+            )
+            return normalize_subtitles(text, "srt")
+        result = subprocess.run(
+            [
+                _ENV_EXECUTABLE,
+                "ffmpeg",
+                "-v",
+                "error",
+                "-copyts",
+                "-i",
+                str(video),
+                "-map",
+                f"0:{index}",
+                "-f",
+                "srt",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=180,
+        )
+        cues = normalize_subtitles(result.stdout, "srt")
+        return self._relative_cues(cues, self._video_origin(video))
+
     def _youtube_captions(
         self,
         url: str,
@@ -348,58 +356,16 @@ class ImportService:
             ("automatic_captions", "youtube-auto"),
         ):
             tracks = info.get(field)
-            if not isinstance(tracks, dict):
-                continue
-            languages = [
-                str(key)
-                for key in cast("dict[object, object]", tracks)
-                if self._language_matches(str(key))
-                and "forced" not in str(key).casefold()
-            ]
-            languages.sort(key=lambda value: value.casefold() != self.caption_language)
-            language = languages[0] if languages else None
+            language = self._youtube_caption_language(tracks)
             if language is None:
                 continue
-            entries = cast("dict[str, object]", tracks).get(language)
-            if not isinstance(entries, list) or not entries:
-                continue
             try:
-                attempt = stage / field
-                attempt.mkdir(exist_ok=True)
-                command = [
-                    sys.executable,
-                    "-m",
-                    "yt_dlp",
-                    "--no-config",
-                    "--no-playlist",
-                    "--skip-download",
-                    "--sub-langs",
-                    language,
-                    "--sub-format",
-                    "vtt/srt",
-                    "--output",
-                    str(attempt / "subtitle.%(ext)s"),
-                    "--write-subs" if field == "subtitles" else "--write-auto-subs",
-                    url,
-                ]
-                _ = subprocess.run(
-                    command, capture_output=True, text=True, check=True, timeout=300
-                )
-                for path in attempt.glob("subtitle.*"):
-                    if path.suffix.casefold() not in {".vtt", ".srt"}:
-                        continue
-                    cues = normalize_subtitles(
-                        path.read_text(encoding="utf-8"),
-                        path.suffix.lstrip("."),
-                        rolling=source == "youtube-auto",
+                cues = self._download_youtube_cues(url, language, stage / field, source)
+                if cues:
+                    track = CaptionTrack(
+                        cues=cues, language=self.caption_language, source=source
                     )
-                    if cues:
-                        return self._save_track(
-                            stage,
-                            CaptionTrack(
-                                cues=cues, language=self.caption_language, source=source
-                            ),
-                        ), None
+                    return self._save_track(stage, track), None
             except (OSError, ValueError, subprocess.SubprocessError) as exc:
                 errors.append(self._safe_error(exc))
         return self._asr_or_missing(
@@ -409,6 +375,57 @@ class ImportService:
             errors,
             spoken_language=str(info.get("language") or ""),
         )
+
+    def _youtube_caption_language(self, tracks: object) -> str | None:
+        if not isinstance(tracks, dict):
+            return None
+        choices = cast("JsonObject", tracks)
+        languages = [
+            key
+            for key in choices
+            if self._language_matches(key)
+            and "forced" not in key.casefold()
+            and isinstance(choices[key], list)
+            and bool(choices[key])
+        ]
+        languages.sort(key=lambda value: value.casefold() != self.caption_language)
+        return languages[0] if languages else None
+
+    @staticmethod
+    def _download_youtube_cues(
+        url: str, language: str, attempt: Path, source: str
+    ) -> list[CaptionCue]:
+        attempt.mkdir(exist_ok=True)
+        command = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--no-config",
+            "--no-playlist",
+            "--skip-download",
+            "--sub-langs",
+            language,
+            "--sub-format",
+            "vtt/srt",
+            "--output",
+            str(attempt / "subtitle.%(ext)s"),
+            "--write-subs" if source == "youtube-human" else "--write-auto-subs",
+            url,
+        ]
+        _ = subprocess.run(
+            command, capture_output=True, text=True, check=True, timeout=300
+        )
+        for path in attempt.glob("subtitle.*"):
+            if path.suffix.casefold() not in {".vtt", ".srt"}:
+                continue
+            cues = normalize_subtitles(
+                path.read_text(encoding="utf-8"),
+                path.suffix.lstrip("."),
+                rolling=source == "youtube-auto",
+            )
+            if cues:
+                return cues
+        return []
 
     def _asr_or_missing(
         self,
@@ -440,7 +457,7 @@ class ImportService:
                 media = stage / "selected-audio.wav"
                 _ = subprocess.run(
                     [
-                        "/usr/bin/env",
+                        _ENV_EXECUTABLE,
                         "ffmpeg",
                         "-v",
                         "error",
@@ -513,7 +530,7 @@ class ImportService:
         """Read the first video stream PTS in seconds."""
         result = subprocess.run(
             [
-                "/usr/bin/env",
+                _ENV_EXECUTABLE,
                 "ffprobe",
                 "-v",
                 "error",
@@ -530,19 +547,19 @@ class ImportService:
             check=True,
             timeout=60,
         )
-        data = cast("dict[str, object]", json.loads(result.stdout))
+        data = cast("JsonObject", json.loads(result.stdout))
         streams = data.get("streams")
         if not isinstance(streams, list) or not streams:
             return 0.0
-        first = cast("list[object]", streams)[0]
-        return float(str(cast("dict[str, object]", first).get("start_time") or 0))
+        first = cast("JsonArray", streams)[0]
+        return float(str(cast("JsonObject", first).get("start_time") or 0))
 
     @staticmethod
     def _stream_origin(video: Path, index: int) -> float:
         """Read an audio stream's absolute presentation origin."""
         result = subprocess.run(
             [
-                "/usr/bin/env",
+                _ENV_EXECUTABLE,
                 "ffprobe",
                 "-v",
                 "error",
@@ -557,11 +574,11 @@ class ImportService:
             check=True,
             timeout=60,
         )
-        data = cast("dict[str, object]", json.loads(result.stdout))
+        data = cast("JsonObject", json.loads(result.stdout))
         raw = data.get("streams")
         streams = [
-            cast("dict[str, object]", entry)
-            for entry in cast("list[object]", raw or [])
+            cast("JsonObject", entry)
+            for entry in cast("JsonArray", raw or [])
             if isinstance(entry, dict)
         ]
         match = next((s for s in streams if s.get("index") == index), None)
@@ -599,7 +616,7 @@ class ImportService:
         data = cast("object", json.loads(result.stdout))
         if not isinstance(data, dict):
             raise TypeError("Invalid YouTube metadata")
-        return cast("dict[str, object]", data)
+        return cast("JsonObject", data)
 
     @staticmethod
     def _yt_download(url: str, stage: Path) -> None:
@@ -648,7 +665,7 @@ class ImportService:
             data = cast("object", response.json())
             if not isinstance(data, dict):
                 raise TypeError("Invalid Jellyfin response")
-            return cast("dict[str, object]", data)
+            return cast("JsonObject", data)
 
     def _jf_item(self, item_id: str) -> dict[str, object]:
         if not item_id or not all(ch.isalnum() or ch == "-" for ch in item_id):
@@ -707,7 +724,7 @@ def main(argv: list[str] | None = None) -> int:
     _ = jellyfin.add_argument("item_id")
     _ = jellyfin.add_argument("--media-source-id")
     _ = jellyfin.add_argument("--audio-language")
-    arguments = cast("dict[str, object]", vars(parser.parse_args(argv)))
+    arguments = cast("JsonObject", vars(parser.parse_args(argv)))
     command = cast("str", arguments["command"])
 
     from library import MediaLibrary  # noqa: PLC0415 - CLI owns startup

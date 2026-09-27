@@ -27,12 +27,12 @@ jobs:
       - name: Install uv
         run: pipx install uv==0.12.3
       - name: Install locked Python dependencies
-        run: uv sync --frozen --no-install-package rpi-gpio --no-install-package spidev
+        run: uv sync --frozen --no-build --no-install-package rpi-gpio --no-install-package spidev
       - name: Run hardware-free tests
         env:
           PYTHONPATH: very_slow_movie_player
           VSMP_ALLOW_MOCK_HARDWARE: 'true'
-        run: uv run --no-sync python -m unittest discover -s tests -v
+        run: uv run --no-sync --no-build python -m unittest discover -s tests -v
 
   hooks:
     name: Prek hooks
