@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from os import getenv
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Self, cast
-from urllib.parse import urlsplit
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated, Self, cast
 
 from httpx import Client, Timeout
 from pydantic import BaseModel, Field, ValidationError
+from settings import SETTINGS
 from utils import const
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from uuid import UUID
 
 MAX_SUFFIX_LENGTH = 10
 BAD_REQUEST = 400
@@ -24,16 +23,16 @@ class Asset(BaseModel):
     """The small subset of Immich asset metadata needed for playback."""
 
     id: UUID
-    kind: str = Field(alias="type")
-    filename: str = Field(alias="originalFileName")
+    kind: Annotated[str, Field(alias="type")]
+    filename: Annotated[str, Field(alias="originalFileName")]
 
 
 class SearchAssetPage(BaseModel):
     """The paginated asset section of Immich's metadata search response."""
 
     items: list[Asset]
-    next_page: str | None = Field(default=None, alias="nextPage")
-    next_cursor: str | None = Field(default=None, alias="nextCursor")
+    next_page: Annotated[str | None, Field(alias="nextPage")] = None
+    next_cursor: Annotated[str | None, Field(alias="nextCursor")] = None
 
 
 class SearchResponse(BaseModel):
@@ -46,25 +45,11 @@ class ImmichAlbum:
     """A read-only Immich API client with a bounded-memory download path."""
 
     def __init__(self) -> None:
-        url = getenv("IMMICH_URL", "").strip().rstrip("/")
-        key = getenv("IMMICH_API_KEY", "")
-        album_id = getenv("IMMICH_ALBUM_ID", "")
-        parsed = urlsplit(url)
-        invalid_authority = not parsed.netloc or parsed.username or parsed.password
-        invalid_suffix = parsed.query or parsed.fragment
-        if parsed.scheme not in {"http", "https"} or invalid_authority or invalid_suffix:
-            raise ValueError(
-                "IMMICH_URL must be an HTTP(S) server URL without credentials or query",
-            )
-        if not key:
-            raise ValueError("IMMICH_API_KEY is required for Immich playback")
-        try:
-            self.album_id: UUID = UUID(album_id)
-        except ValueError as exc:
-            raise ValueError("IMMICH_ALBUM_ID must be a UUID") from exc
+        url = str(SETTINGS.immich_url).rstrip("/")
+        self.album_id: UUID = SETTINGS.immich_album_id
         self.client: Client = Client(
-            base_url=f"{url if parsed.path.endswith('/api') else url + '/api'}/",
-            headers={"x-api-key": key},
+            base_url=f"{url if url.endswith('/api') else url + '/api'}/",
+            headers={"x-api-key": SETTINGS.immich_api_key.get_secret_value()},
             timeout=Timeout(30.0, connect=10.0),
             follow_redirects=False,
         )

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import subprocess  # noqa: S404 - invoke the installed CLI without shell expansion
 import sys
-from os import environ
 
+from settings import SETTINGS
 from utils import const
 
 
 def main() -> None:
     """Download playlist videos, recording only successful video IDs in the archive."""
-    playlist_id = environ["YT_PLAYLIST_ID"]
+    playlist_id = SETTINGS.yt_playlist_id
     const.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     _ = subprocess.run(  # noqa: S603 - arguments are passed directly, without a shell
         [

@@ -7,7 +7,6 @@ from fractions import Fraction
 from itertools import chain
 from math import ceil, isfinite
 from math import pow as float_pow
-from os import getenv
 from pathlib import Path
 from signal import SIG_IGN, SIGTERM, signal
 from sys import exception as active_exception
@@ -18,6 +17,7 @@ from typing import TYPE_CHECKING, NoReturn
 from immich import Asset, ImmichAlbum
 from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
+from settings import SETTINGS
 from utils import EPaperDisplay, const
 from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
@@ -176,9 +176,7 @@ def display_image(
     LOGGER.info("Displaying `%s` for %s seconds", image_path, display_time)
 
     # Darken midtones before dithering so they remain visible on the E-paper panel.
-    gamma = float(getenv("VSMP_IMAGE_GAMMA", "1.7"))
-    if gamma <= 0:
-        raise ValueError("VSMP_IMAGE_GAMMA must be positive")
+    gamma = SETTINGS.vsmp_image_gamma
     with (
         Image.open(output_path) as formatted,
         formatted.convert("L") as grayscale,
@@ -273,7 +271,7 @@ def play_video(video_path: Path) -> None:
     frame_count, fps, stream_index = video_metadata(video_path)
     LOGGER.info("There are %d frames in this video", frame_count)
 
-    if getenv("ALWAYS_RESTART_VIDEOS", "false").lower() == "true":
+    if SETTINGS.always_restart_videos:
         LOGGER.debug("Resetting progress log for `%s`", video_path)
         set_progress(video_path, 0, frame_count)
 
@@ -344,11 +342,9 @@ def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None)
 
 
 @process_exception(logger=LOGGER)
-def main() -> None:  # noqa: PLR0912 - source preparation and hardware lifecycle
+def main() -> None:
     """Play a configured local video, or assets from an Immich album."""
-    source = getenv("VSMP_SOURCE", "local").casefold()
-    if source not in {"local", "immich"}:
-        raise ValueError("VSMP_SOURCE must be 'local' or 'immich'")
+    source = SETTINGS.vsmp_source
 
     with ExitStack() as stack:
         video: Path | None = None
@@ -356,12 +352,7 @@ def main() -> None:  # noqa: PLR0912 - source preparation and hardware lifecycle
         first_asset: Asset | None = None
         album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
         if album is None:
-            video_path = getenv("VSMP_VIDEO_PATH")
-            if not video_path:
-                raise ValueError("VSMP_VIDEO_PATH must point to a local video")
-            video = Path(video_path).expanduser()
-            if not video.is_file():
-                raise FileNotFoundError(video)
+            video = SETTINGS.vsmp_video_path
         else:
             assets = iter(album.assets())
             first_asset = next(assets, None)
