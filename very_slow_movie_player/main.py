@@ -5,34 +5,31 @@ from __future__ import annotations
 from contextlib import ExitStack
 from fractions import Fraction
 from itertools import chain
-from json import dumps, loads
 from math import ceil
+from math import pow as float_pow
 from os import getenv
 from pathlib import Path
 from time import sleep
-from typing import TypedDict
+from typing import TYPE_CHECKING
 
 from immich import Asset, ImmichAlbum
 from PIL import Image
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
+from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
 
-from ffmpeg import input as ffmpeg_input  # type: ignore[attr-defined]
-from ffmpeg import probe  # type: ignore[attr-defined]
+from ffmpeg import input as ffmpeg_input
+from ffmpeg import probe
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 LOGGER = get_streaming_logger(__name__)
 
 
 DISPLAY = EPaperDisplay()
-
-
-class ProgressInfo(TypedDict):
-    """Model for the progress info objects in the log."""
-
-    current: int
-    total: int
 
 
 @process_exception(logger=LOGGER)
@@ -73,7 +70,7 @@ def extract_frame(
     """
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
-    (
+    _ = (
         ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
         .output(str(extract_output_path), vframes=1)
         .overwrite_output()
@@ -125,56 +122,6 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
 
 
 @process_exception(logger=LOGGER)
-def get_progress(video_path: Path, default: int = 0) -> int:
-    """Get the number of the most recently played frame from the JSON log file.
-
-    This is so we can resume in the case of an early exit.
-
-    Args:
-        video_path (Path): the path to the file being played
-        default (int): a default value to return if the file isn't logged
-
-    Returns:
-        int: the number of the frame that was played most recently
-    """
-    log_data: dict[str, ProgressInfo] = loads(const.PROGRESS_LOG.read_text())
-
-    LOGGER.info("Getting progress for `%s`", video_path)
-
-    try:
-        return log_data[video_path.as_posix()]["current"]
-    except KeyError:
-        return default
-
-
-@process_exception(logger=LOGGER)
-def set_progress(
-    video_path: Path,
-    current_frame: int,
-    frame_count: int | None = None,
-) -> None:
-    """Update the JSON log file, so we can resume if the program is exited.
-
-    Args:
-        video_path (Path): the path to the file being played
-        current_frame (int): which frame has been played most recently
-        frame_count (int): the total number of frames in the video
-    """
-    log_data = loads(const.PROGRESS_LOG.read_text())
-
-    progress = {video_path.as_posix(): {"current": current_frame}}
-
-    LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
-
-    if frame_count:
-        progress[video_path.as_posix()]["total"] = frame_count
-
-    log_data.update(progress)
-
-    const.PROGRESS_LOG.write_text(dumps(log_data, indent=2, sort_keys=True))
-
-
-@process_exception(logger=LOGGER)
 def display_image(
     image_path: Path = const.FRAME_PATH,
     display_time: float = const.FRAME_DELAY,
@@ -196,7 +143,7 @@ def display_image(
         raise ValueError("VSMP_IMAGE_GAMMA must be positive")
     grayscale = Image.open(output_path).convert("L")
     darkened = grayscale.point(
-        [round(255 * (value / 255) ** gamma) for value in range(256)],
+        [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
     )
     pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)
 
@@ -222,6 +169,8 @@ def video_metadata(video_path: Path) -> tuple[int, float]:
 
     fps = 0.0
     for rate in (video_stream.get("avg_frame_rate"), video_stream.get("r_frame_rate")):
+        if rate is None:
+            continue
         try:
             fps = float(Fraction(rate))
         except (TypeError, ValueError, ZeroDivisionError):
@@ -305,7 +254,7 @@ def choose_next_video() -> Path | None:
     Returns:
         str: the name of the video file to start playing
     """
-    log_data: dict[str, ProgressInfo] = loads(const.PROGRESS_LOG.read_text())
+    log_data = load_progress()
 
     LOGGER.info("There are %i videos in the log", len(log_data))
 
@@ -357,6 +306,9 @@ def main() -> None:
         raise ValueError("VSMP_SOURCE must be 'local' or 'immich'")
 
     with ExitStack() as stack:
+        video: Path | None = None
+        assets: Iterator[Asset] | None = None
+        first_asset: Asset | None = None
         album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
         if album is None:
             video_path = getenv("VSMP_VIDEO_PATH")
@@ -373,19 +325,18 @@ def main() -> None:
                 sleep(300)
                 return
 
-        const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
-        if not const.PROGRESS_LOG.is_file():
-            LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
-            const.PROGRESS_LOG.write_text("{}")
+        _ = load_progress()
 
-        DISPLAY.init()
+        _ = DISPLAY.init()
         try:
             DISPLAY.clear()
-            if album is None:
+            if video is not None:
                 play_video(video)
-            else:
+            elif album is not None and first_asset is not None and assets is not None:
                 for asset in chain((first_asset,), assets):
                     play_immich_asset(album, asset)
+            else:
+                raise RuntimeError("No playback source was prepared")
         finally:
             DISPLAY.sleep()
             DISPLAY.pi.module_exit()

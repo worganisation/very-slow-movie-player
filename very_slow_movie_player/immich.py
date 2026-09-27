@@ -11,7 +11,7 @@ from uuid import UUID
 
 from httpx import Client, Timeout
 from pydantic import BaseModel, Field, ValidationError
-from utils import const  # pyright: ignore[reportImplicitRelativeImport]
+from utils import const
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
