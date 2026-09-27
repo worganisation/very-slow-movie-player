@@ -60,8 +60,20 @@ class HAClient:
 
     def stop(self) -> None:
         """Mark controls unavailable on graceful shutdown."""
-        self._publish("availability", "offline", retain=True)
-        _ = self.client.disconnect()
+        acknowledged = False
+        if self.client.is_connected():
+            info = self.client.publish(
+                f"{self.root}/availability", "offline", qos=1, retain=True
+            )
+            try:
+                info.wait_for_publish(timeout=3)
+                acknowledged = info.is_published()
+            except (RuntimeError, ValueError):
+                pass
+        if acknowledged:
+            _ = self.client.disconnect()
+        # If the offline update was not acknowledged, closing the socket on
+        # process exit lets the broker publish the offline last will instead.
         _ = self.client.loop_stop()
 
     def _publish(self, suffix: str, payload: str | bytes, *, retain: bool) -> None:
