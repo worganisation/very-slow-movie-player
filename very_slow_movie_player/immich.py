@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self, cast
 from uuid import UUID  # noqa: TC003 - Pydantic resolves Asset.id at runtime
 
 from httpx2 import Client, Timeout
@@ -41,12 +41,19 @@ class SearchResponse(BaseModel):
     assets: SearchAssetPage
 
 
+class AlbumInfo(BaseModel):
+    """Fields needed for a friendly, stable Home Assistant album selector."""
+
+    id: UUID
+    name: Annotated[str, Field(alias="albumName")]
+
+
 class ImmichAlbum:
     """A read-only Immich API client with a bounded-memory download path."""
 
-    def __init__(self) -> None:
+    def __init__(self, album_id: UUID | None = None) -> None:
         url = str(SETTINGS.immich_url).rstrip("/")
-        self.album_id: UUID = SETTINGS.immich_album_id
+        self.album_id: UUID = album_id or SETTINGS.immich_album_id
         self.client: Client = Client(
             base_url=f"{url if url.endswith('/api') else url + '/api'}/",
             headers={"x-api-key": SETTINGS.immich_api_key.get_secret_value()},
@@ -61,6 +68,18 @@ class ImmichAlbum:
     def __exit__(self, *_args: object) -> None:
         """Close connections when playback stops."""
         self.client.close()
+
+    def albums(self) -> list[AlbumInfo]:
+        """List accessible albums via Immich's album read endpoint."""
+        response = self.client.get("albums")
+        _ = response.raise_for_status()
+        raw = cast("object", response.json())
+        if not isinstance(raw, list):
+            raise TypeError("Immich returned an invalid album list")
+        try:
+            return [AlbumInfo.model_validate(item) for item in cast("list[object]", raw)]
+        except ValidationError as exc:
+            raise ValueError("Immich returned an invalid album list") from exc
 
     def assets(self) -> Iterator[Asset]:  # noqa: C901, PLR0912
         """Page through album assets; v3 removed assets from album detail."""

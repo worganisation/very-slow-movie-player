@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
-from contextlib import ExitStack
+from datetime import UTC, datetime, timedelta
 from fractions import Fraction
 from io import BytesIO
-from itertools import chain
 from math import ceil, isfinite
 from math import pow as float_pow
 from pathlib import Path
 from signal import SIG_IGN, SIGTERM, signal
 from sys import exception as active_exception
 from tempfile import NamedTemporaryFile
-from time import sleep
-from typing import TYPE_CHECKING, NoReturn
+from time import monotonic
+from typing import TYPE_CHECKING, NoReturn, cast
 
+from controls import (
+    CommandMailbox,
+    PlaybackControls,
+    apply_command,
+    load_controls,
+    save_controls,
+)
 from immich import Asset, ImmichAlbum
-from mqtt_image import publish_displayed_image
+from mqtt_controls import HAClient
 from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
-from settings import SETTINGS
 from utils import EPaperDisplay, const
 from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
@@ -29,7 +34,6 @@ from ffmpeg import input as ffmpeg_input
 from ffmpeg import probe
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from types import FrameType
 
     from ffmpeg import ProbeInfo, ProbeStream
@@ -38,6 +42,10 @@ LOGGER = get_streaming_logger(__name__)
 
 
 DISPLAY = EPaperDisplay()
+
+
+class PanelRefreshError(Exception):
+    """A hardware failure that should stop playback for systemd recovery."""
 
 
 @process_exception(logger=LOGGER)
@@ -164,21 +172,21 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
 @process_exception(logger=LOGGER)
 def display_image(
     image_path: Path,
-    display_time: float,
+    gamma: float,
+    mqtt: HAClient,
 ) -> None:
     """Display an image on the EPD.
 
     Args:
         image_path (Path): the path to the file to display on the EPD
-        display_time (Union([int, float])): the number of seconds to display the
-         image for
+        gamma (float): correction applied before dithering
+        mqtt (HAClient): persistent MQTT publisher
     """
     output_path = format_image(image_path)
 
-    LOGGER.info("Displaying `%s` for %s seconds", image_path, display_time)
+    LOGGER.info("Displaying `%s`", image_path)
 
     # Darken midtones before dithering so they remain visible on the E-paper panel.
-    gamma = SETTINGS.vsmp_image_gamma
     with (
         Image.open(output_path) as formatted,
         formatted.convert("L") as grayscale,
@@ -187,18 +195,19 @@ def display_image(
         ) as darkened,
         darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
     ):
-        buffer = DISPLAY.getbuffer(monochrome)
-        DISPLAY.display(buffer)
+        try:
+            buffer = DISPLAY.getbuffer(monochrome)
+            DISPLAY.display(buffer)
+        except Exception as exc:
+            raise PanelRefreshError("Panel refresh failed") from exc
         try:
             with BytesIO() as png:
                 monochrome.save(png, format="PNG")
-                publish_displayed_image(png.getvalue())
+                mqtt.image(png.getvalue())
         except Exception as exc:  # noqa: BLE001 - reporting must not interrupt playback
             LOGGER.warning(
                 "MQTT image update failed after display: %s", type(exc).__name__
             )
-
-    sleep(display_time)
 
 
 def usable_frame_rate(stream: ProbeStream) -> float:
@@ -262,67 +271,271 @@ def video_metadata(video_path: Path) -> tuple[int, float, int]:
     return usable_frame_count(video_stream, probe_data, fps), fps, stream_index
 
 
-@process_exception(logger=LOGGER)
-def play_video(video_path: Path) -> None:
-    """Play a video file on the E-Paper display.
+class PlaybackRuntime:
+    """Serialize commands and panel scheduling on the playback thread."""
 
-    Args:
-        video_path (Path): the path to the file to play
+    def __init__(self) -> None:
+        self.controls: PlaybackControls
+        self.overridden: set[str]
+        self.controls, self.overridden = load_controls()
+        self.mailbox: CommandMailbox = CommandMailbox()
+        self.mqtt: HAClient = HAClient(self.mailbox)
+        self.last_panel_refresh: float | None = None
+        self.current_path: Path | None = None
+        self.current_kind: str = "video"
+        self.current_media: str = "none"
+        self.current_position: str = "none"
+        self.current_video: tuple[Path, int, float, int] | None = None
+        self.next_album_refresh: float = 0
+        self.selection: tuple[str, Path, str, str] = self.selection_key()
+        self.buttons: set[str] = set()
+        self.mqtt.state("playback_status", "starting")
+        self.mqtt.state("current_media", "none")
+        self.mqtt.state("video_position", "none")
+        self.mqtt.state("last_error", "none")
+        self.mqtt.state("last_refresh", "None")
+        self.mqtt.state("next_refresh", "None")
+        self.publish_controls()
 
-    Raises:
-        FileNotFoundError: if the video path doesn't exist
-    """
-    LOGGER.info("Input video is `%s`", video_path.as_posix())
+    def selection_key(self) -> tuple[str, Path, str, str]:
+        """Track fields that change the active source iterator."""
+        value = self.controls
+        return (value.source, value.video_path, str(value.album), value.media_type)
 
-    if not video_path.is_file():
-        raise FileNotFoundError(video_path)
+    def publish_controls(self) -> None:
+        """Report confirmed settings only after persistence succeeds."""
+        values = cast("dict[str, object]", self.controls.model_dump(mode="json"))
+        for name, value in values.items():
+            if isinstance(value, bool):
+                state = "ON" if value else "OFF"
+            elif name == "album":
+                state = self.mqtt.album_label(str(value))
+            else:
+                state = str(value)
+            self.mqtt.state(name, state)
 
+    def refresh_albums(self) -> None:
+        """Fetch selector labels on the playback thread, never in MQTT callbacks."""
+        with ImmichAlbum(self.controls.album) as album:
+            rows = album.albums()
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[row.name] = counts.get(row.name, 0) + 1
+        labels = {
+            str(row.id): (
+                f"{row.name[:210]} [{row.id}]" if counts[row.name] > 1 else row.name[:255]
+            )
+            for row in rows
+        }
+        selected = str(self.controls.album)
+        _ = labels.setdefault(selected, selected)
+        self.mqtt.albums(labels)
+        self.mqtt.state("album", self.mqtt.album_label(selected))
+        self.next_album_refresh = monotonic() + 3600
+
+    def process_commands(self) -> None:
+        """Apply queued changes transactionally outside the MQTT network thread."""
+        settings, buttons = self.mailbox.drain()
+        self.buttons.update(buttons)
+        if "restart_video" in self.buttons and self.current_kind == "photo":
+            self.buttons.discard("restart_video")
+            self.mqtt.state("last_error", "No current video to restart")
+        if "redisplay" in self.buttons and self.current_path is None:
+            self.buttons.discard("redisplay")
+            self.mqtt.state("last_error", "No frame to redisplay")
+        for name, payload in settings.items():
+            self.apply_setting(name, payload)
+        if not settings and not buttons:
+            self.maybe_refresh_albums()
+
+    def maybe_refresh_albums(self) -> None:
+        """Refresh selector options periodically even while local video plays."""
+        if monotonic() >= self.next_album_refresh:
+            self.next_album_refresh = monotonic() + 300
+            try:
+                self.refresh_albums()
+            except Exception as exc:  # noqa: BLE001 - other source can keep playing
+                self.mqtt.state("last_error", f"album list: {exc}"[:255])
+
+    def apply_setting(self, name: str, payload: str) -> None:
+        """Persist one command before publishing its confirmed value."""
+        try:
+            candidate = apply_command(self.controls, name, payload)
+            if name == "video_path":
+                _ = video_metadata(candidate.video_path)
+            if name == "album":
+                self.validate_album(candidate)
+            save_controls(candidate, self.overridden | {name})
+        except Exception as exc:  # noqa: BLE001 - invalid input cannot replace good state
+            self.mqtt.state("last_error", f"{name}: {exc}"[:255])
+            return
+        self.controls = candidate
+        self.overridden.add(name)
+        self.publish_controls()
+        self.mqtt.state("last_error", "none")
+        if self.selection_key() != self.selection:
+            self.selection = self.selection_key()
+            self.buttons.clear()
+            self.mqtt.state("playback_status", "switching source")
+        if name == "album":
+            self.next_album_refresh = 0
+
+    @staticmethod
+    def validate_album(candidate: PlaybackControls) -> None:
+        """Accept only albums returned by the configured Immich account."""
+        with ImmichAlbum(candidate.album) as album:
+            if candidate.album not in {row.id for row in album.albums()}:
+                raise ValueError("Immich album is not accessible")
+
+    def mark_displayed(
+        self,
+        path: Path,
+        media: str,
+        position: str = "none",
+        *,
+        kind: str = "video",
+        video_frame: tuple[Path, int, float, int] | None = None,
+    ) -> None:
+        """Record the panel result and schedule the next normal update."""
+        self.last_panel_refresh = monotonic()
+        self.current_path = path
+        self.current_kind = kind
+        self.current_media = media
+        self.current_position = position
+        self.current_video = video_frame
+        self.mqtt.state("current_media", media[:255])
+        self.mqtt.state("video_position", position)
+        self.mqtt.state("last_refresh", datetime.now(UTC).isoformat())
+        self.mqtt.state("playback_status", "playing")
+        self.mqtt.state("last_error", "none")
+
+    def wait_ready(self, selection: tuple[str, Path, str, str]) -> bool:
+        """Interrupt waits for commands, but enforce 180 seconds between frames."""
+        while True:
+            self.process_commands()
+            if self.selection != selection:
+                return False
+            if (
+                self.controls.playback_enabled
+                and "redisplay" in self.buttons
+                and self.current_path is not None
+                and self._minimum_wait() <= 0
+            ):
+                self.buttons.discard("redisplay")
+                image_path = self.current_path
+                if self.current_video is not None:
+                    source, frame, fps, stream_index = self.current_video
+                    image_path = extract_frame(
+                        source, frame, fps=fps, stream_index=stream_index
+                    )
+                display_image(image_path, self.controls.gamma, self.mqtt)
+                self.mark_displayed(
+                    image_path,
+                    self.current_media,
+                    self.current_position,
+                    kind=self.current_kind,
+                    video_frame=self.current_video,
+                )
+                continue
+            if (
+                self.controls.playback_enabled
+                and ("next" in self.buttons or "restart_video" in self.buttons)
+            ) and self._minimum_wait() <= 0:
+                return True
+            if self.controls.playback_enabled and self._normal_wait() <= 0:
+                self.mqtt.state("next_refresh", "None")
+                return True
+            remaining = self._minimum_wait() if self.buttons else self._normal_wait()
+            if not self.controls.playback_enabled:
+                self.mqtt.state("playback_status", "paused")
+                self.mqtt.state("next_refresh", "None")
+                remaining = 60
+            elif self.last_panel_refresh is not None:
+                self.mqtt.state(
+                    "next_refresh",
+                    (
+                        datetime.now(UTC) + timedelta(seconds=max(0, remaining))
+                    ).isoformat(),
+                )
+            _ = self.mailbox.wake.wait(timeout=max(0.05, min(remaining, 60)))
+
+    def _minimum_wait(self) -> float:
+        if self.last_panel_refresh is None:
+            return 0
+        return max(0.0, 180.0 - (monotonic() - self.last_panel_refresh))
+
+    def _normal_wait(self) -> float:
+        if self.last_panel_refresh is None:
+            return 0
+        interval = (
+            self.controls.photo_interval
+            if self.current_kind == "photo"
+            else self.controls.video_interval
+        )
+        return max(
+            self._minimum_wait(), interval - (monotonic() - self.last_panel_refresh)
+        )
+
+
+def play_video(
+    runtime: PlaybackRuntime,
+    video_path: Path,
+    *,
+    immich: bool = False,
+    media_label: str | None = None,
+) -> None:
+    """Advance a video with settings and actions applied between panel updates."""
     frame_count, fps, stream_index = video_metadata(video_path)
-    LOGGER.info("There are %d frames in this video", frame_count)
-
-    if SETTINGS.always_restart_videos:
-        LOGGER.debug("Resetting progress log for `%s`", video_path)
+    if runtime.controls.always_restart_videos:
         set_progress(video_path, 0, frame_count)
-
-    current_frame = get_progress(video_path)
-    if current_frame >= frame_count:
-        current_frame = 0
-
-    hrs, secs = divmod(
-        (
-            ((frame_count - current_frame) / const.INCREMENT)
-            * SETTINGS.vsmp_video_frame_delay_seconds
-        ),
-        3600,
-    )
-    mins, secs = divmod(secs, 60)
-
-    LOGGER.info(
-        "It's going to take %ih%im%is to play this video",
-        hrs,
-        mins,
-        secs,
-    )
-
-    for frame in range(current_frame, frame_count, const.INCREMENT):
+    frame = get_progress(video_path)
+    if frame >= frame_count:
+        frame = 0
+    selection = runtime.selection
+    while True:
+        if not runtime.wait_ready(selection):
+            return
+        if "restart_video" in runtime.buttons:
+            runtime.buttons.discard("restart_video")
+            frame = 0
+        if "next" in runtime.buttons:
+            runtime.buttons.discard("next")
+            if immich:
+                return
+            if frame >= frame_count:
+                frame = 0
+        elif frame >= frame_count:
+            set_progress(video_path, frame_count, frame_count)
+            return
+        output = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
+        display_image(output, runtime.controls.gamma, runtime.mqtt)
+        runtime.mark_displayed(
+            output,
+            media_label or str(video_path),
+            f"{frame + 1}/{frame_count}",
+            video_frame=(video_path, frame, fps, stream_index),
+        )
         set_progress(video_path, frame, frame_count)
-
-        # Use ffmpeg to extract a frame from the movie, crop it,
-        # letterbox it and output it as a JPG
-        output_path = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
-
-        display_image(output_path, SETTINGS.vsmp_video_frame_delay_seconds)
-
-    set_progress(video_path, frame_count, frame_count)
+        frame += runtime.controls.frame_advance
 
 
-def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
-    """Display one album asset using the existing image and video paths."""
+def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset) -> None:
+    """Display an eligible album asset while retaining the current panel on errors."""
+    if runtime.controls.media_type == "photos" and asset.kind != "IMAGE":
+        return
+    if runtime.controls.media_type == "videos" and asset.kind != "VIDEO":
+        return
     media = album.download(asset)
+    media_label = f"{asset.filename} [{asset.id}]"
     if asset.kind == "VIDEO":
-        play_video(media)
-    else:
-        display_image(media, 300)
+        play_video(runtime, media, immich=True, media_label=media_label)
+        return
+    if not runtime.wait_ready(runtime.selection):
+        return
+    display_image(media, runtime.controls.gamma, runtime.mqtt)
+    runtime.mark_displayed(media, media_label, kind="photo")
+    if runtime.wait_ready(runtime.selection):
+        runtime.buttons.discard("next")
 
 
 def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> NoReturn:
@@ -358,52 +571,107 @@ def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None)
             raise cleanup_error
 
 
+def play_immich_source(runtime: PlaybackRuntime) -> None:
+    """Iterate selected album assets, interrupting when selection changes."""
+    selected = runtime.selection
+    with ImmichAlbum(runtime.controls.album) as album:
+        try:
+            runtime.refresh_albums()
+        except Exception as exc:  # noqa: BLE001 - playback still uses stable ID
+            runtime.mqtt.state("last_error", f"album list: {exc}"[:255])
+        seen = False
+        for asset in album.assets():
+            runtime.process_commands()
+            if runtime.selection != selected:
+                return
+            media_type = runtime.controls.media_type
+            if (media_type == "photos" and asset.kind != "IMAGE") or (
+                media_type == "videos" and asset.kind != "VIDEO"
+            ):
+                continue
+            seen = True
+            play_asset_with_retry(runtime, album, asset, selected)
+        if not seen and runtime.selection == selected:
+            runtime.mqtt.state("playback_status", "waiting for media")
+            _ = runtime.mailbox.wake.wait(60)
+
+
+def play_asset_with_retry(
+    runtime: PlaybackRuntime,
+    album: ImmichAlbum,
+    asset: Asset,
+    selection: tuple[str, Path, str, str],
+) -> None:
+    """Allow Next to skip a failing Immich asset without clearing the panel."""
+    while runtime.selection == selection:
+        try:
+            play_immich_asset(runtime, album, asset)
+        except PanelRefreshError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - media/network failures are recoverable
+            LOGGER.warning("Immich asset failed; retaining current frame: %s", exc)
+            runtime.mqtt.state("last_error", str(exc)[:255])
+            runtime.mqtt.state("playback_status", "source error")
+            runtime.mqtt.state("next_refresh", "None")
+            _ = runtime.mailbox.wake.wait(60)
+            runtime.process_commands()
+            if "next" in runtime.buttons:
+                runtime.buttons.discard("next")
+                return
+        else:
+            return
+
+
+def play_selected_source(runtime: PlaybackRuntime) -> None:
+    """Keep source failures from clearing the last successful frame."""
+    try:
+        if runtime.controls.source == "local":
+            play_video(runtime, runtime.controls.video_path)
+        else:
+            play_immich_source(runtime)
+    except PanelRefreshError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - source errors retain the last panel image
+        LOGGER.warning("Media source failed; retaining current frame: %s", exc)
+        runtime.mqtt.state("last_error", str(exc)[:255])
+        runtime.mqtt.state("playback_status", "source error")
+        runtime.mqtt.state("next_refresh", "None")
+        _ = runtime.mailbox.wake.wait(60)
+
+
 @process_exception(logger=LOGGER)
 def main() -> None:
-    """Play a configured local video, or assets from an Immich album."""
-    source = SETTINGS.vsmp_source
-
-    with ExitStack() as stack:
-        video: Path | None = None
-        assets: Iterator[Asset] | None = None
-        first_asset: Asset | None = None
-        album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
-        if album is None:
-            video = SETTINGS.vsmp_video_path
-        else:
-            assets = iter(album.assets())
-            first_asset = next(assets, None)
-            if first_asset is None:
-                LOGGER.warning("The configured Immich album contains no assets")
-                sleep(300)
-                return
-
-        _ = load_progress()
-
-        previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
-        display_initialized = False
+    """Run a single hardware owner with a persistent, asynchronous MQTT client."""
+    runtime = PlaybackRuntime()
+    _ = load_progress()
+    previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
+    display_initialized = False
+    mqtt_started = False
+    try:
+        _ = DISPLAY.init()
+        display_initialized = True
+        DISPLAY.clear()  # Startup clear is separate from scheduled frame refreshes.
         try:
-            _ = DISPLAY.init()
-            display_initialized = True
-            DISPLAY.clear()
-            if video is not None:
-                play_video(video)
-            elif album is not None and first_asset is not None and assets is not None:
-                for asset in chain((first_asset,), assets):
-                    play_immich_asset(album, asset)
-            else:
-                raise RuntimeError("No playback source was prepared")
+            runtime.mqtt.start()
+            mqtt_started = True
+        except (ConnectionError, OSError) as exc:
+            LOGGER.warning("MQTT startup failed; playback continues: %s", exc)
+        while True:
+            runtime.process_commands()
+            play_selected_source(runtime)
+    finally:
+        previous_error = active_exception()
+        _ = signal(SIGTERM, SIG_IGN)
+        try:
+            if mqtt_started:
+                runtime.mqtt.stop()
+            if DISPLAY.pi.module_initialized:
+                clean_up_display(
+                    enter_sleep=display_initialized,
+                    previous_error=previous_error,
+                )
         finally:
-            previous_error = active_exception()
-            _ = signal(SIGTERM, SIG_IGN)
-            try:
-                if DISPLAY.pi.module_initialized:
-                    clean_up_display(
-                        enter_sleep=display_initialized,
-                        previous_error=previous_error,
-                    )
-            finally:
-                _ = signal(SIGTERM, previous_sigterm_handler)
+            _ = signal(SIGTERM, previous_sigterm_handler)
 
 
 if __name__ == "__main__":
