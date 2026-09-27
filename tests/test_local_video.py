@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from importlib import reload
 from json import loads
+from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -15,6 +17,17 @@ from utils import const
 
 class LocalVideoTests(TestCase):
     """Verify metadata, progress, and startup behavior."""
+
+    @staticmethod
+    def test_constants_load_without_youtube_credentials() -> None:
+        """Local playback can load shared constants without YouTube keys."""
+        environment = {
+            key: value
+            for key, value in environ.items()
+            if key not in {"YT_API_KEY", "YT_PLAYLIST_ID"}
+        }
+        with patch.dict("os.environ", environment, clear=True):
+            reload(const)
 
     @staticmethod
     def test_display_darkens_midtones_before_dithering() -> None:

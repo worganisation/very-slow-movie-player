@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from os import environ, getenv
+from os import getenv
 from pathlib import Path
 from socket import gethostname
 from tempfile import gettempdir
@@ -30,15 +30,6 @@ PROGRESS_LOG: Final = MEDIA_DIR / "progress_log.json"
 
 INCREMENT = 12
 """The number of frames to skip between each displayed frame."""
-
-YT_API_KEY: Final = environ["YT_API_KEY"]
-"""YouTube API key.
-
-https://console.cloud.google.com/apis/dashboard?project=very-slow-movie-player
-"""
-
-YT_PLAYLIST_ID: Final = environ["YT_PLAYLIST_ID"]
-"""Playlist of videos to download and display."""
 
 YDL_OPTS: Final = {
     "format": "bestvideo[height<=480]/best[height<=480]",
