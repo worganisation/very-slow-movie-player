@@ -163,8 +163,8 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
 
 @process_exception(logger=LOGGER)
 def display_image(
-    image_path: Path = const.FRAME_PATH,
-    display_time: float = const.FRAME_DELAY,
+    image_path: Path,
+    display_time: float,
 ) -> None:
     """Display an image on the EPD.
 
@@ -289,7 +289,10 @@ def play_video(video_path: Path) -> None:
         current_frame = 0
 
     hrs, secs = divmod(
-        (((frame_count - current_frame) / const.INCREMENT) * const.FRAME_DELAY),
+        (
+            ((frame_count - current_frame) / const.INCREMENT)
+            * SETTINGS.vsmp_video_frame_delay_seconds
+        ),
         3600,
     )
     mins, secs = divmod(secs, 60)
@@ -308,7 +311,7 @@ def play_video(video_path: Path) -> None:
         # letterbox it and output it as a JPG
         output_path = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
 
-        display_image(output_path)
+        display_image(output_path, SETTINGS.vsmp_video_frame_delay_seconds)
 
     set_progress(video_path, frame_count, frame_count)
 
