@@ -18,50 +18,24 @@ class ProgressInfo(TypedDict):
     total: NotRequired[int]
 
 
-def _validate_entry(video_path: object, info: object) -> None:
-    """Check one path and its saved frame counters."""
-    if not isinstance(video_path, str) or not isinstance(info, dict):
-        raise TypeError("Progress entries must map paths to objects")
-    values = cast("dict[object, object]", info)
-    current = values.get("current")
-    if type(current) is not int:
-        raise TypeError("Progress entries need an integer current frame")
-    if current < 0:
-        raise ValueError("Progress entries need a nonnegative current frame")
-    if "total" in values:
-        total = values["total"]
-        if type(total) is not int:
-            raise TypeError("Progress totals must be integers")
-        if total < 0:
-            raise ValueError("Progress totals must be nonnegative")
-
-
-def validate_progress(data: object) -> dict[str, ProgressInfo]:
-    """Reject damaged progress data before it can affect playback."""
-    if not isinstance(data, dict):
-        raise TypeError("Progress log must contain an object")
-
-    entries = cast("dict[object, object]", data)
-    for video_path, info in entries.items():
-        _validate_entry(video_path, info)
-
-    return cast("dict[str, ProgressInfo]", data)
-
-
 def load_progress() -> dict[str, ProgressInfo]:
     """Return all saved media positions after one-time migration."""
     initialize()
     connection = connect()
     try:
+        rows = cast(
+            "list[tuple[str, int, int | None]]",
+            connection.execute(
+                "SELECT media_path, current, total FROM progress"
+            ).fetchall(),
+        )
         return {
             path: (
                 {"current": current, "total": total}
                 if total is not None
                 else {"current": current}
             )
-            for path, current, total in connection.execute(
-                "SELECT media_path, current, total FROM progress"
-            )
+            for path, current, total in rows
         }
     finally:
         connection.close()
@@ -87,10 +61,11 @@ def set_progress(
     connection = connect()
     try:
         with connection:
-            connection.execute(
-                "INSERT INTO progress(media_path, current, total) VALUES (?, ?, ?) "
-                "ON CONFLICT(media_path) DO UPDATE SET current=excluded.current, total=excluded.total "
-                "WHERE current IS NOT excluded.current OR total IS NOT excluded.total",
+            _ = connection.execute(
+                """INSERT INTO progress(media_path, current, total) VALUES (?, ?, ?)
+                ON CONFLICT(media_path) DO UPDATE SET
+                    current=excluded.current, total=excluded.total
+                WHERE current IS NOT excluded.current OR total IS NOT excluded.total""",
                 (video_path.as_posix(), current_frame, frame_count),
             )
     finally:

@@ -3,70 +3,13 @@
 from __future__ import annotations
 
 from json import dumps, loads
-from os import R_OK, access
-from pathlib import Path  # noqa: TC003 - Pydantic resolves this annotation at runtime
 from threading import Event, Lock
-from typing import Annotated, Literal
+from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
-from settings import SETTINGS
+from control_model import BUTTON_NAMES, CONTROL_NAMES, PlaybackControls
+from pydantic import ValidationError
 from storage import connect, initialize
-
-CONTROL_NAMES = frozenset({
-    "source",
-    "playback_enabled",
-    "video_interval",
-    "photo_interval",
-    "frame_advance",
-    "gamma",
-    "video_path",
-    "album",
-    "media_type",
-    "always_restart_videos",
-})
-BUTTON_NAMES = frozenset({"next", "redisplay", "restart_video"})
-
-
-class PlaybackControls(BaseModel):
-    """Only non-secret settings exposed to Home Assistant."""
-
-    source: Literal["local", "immich"]
-    playback_enabled: bool
-    video_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
-    photo_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
-    frame_advance: Annotated[int, Field(ge=1, le=100000)]
-    gamma: Annotated[float, Field(ge=0.1, le=10, allow_inf_nan=False)]
-    video_path: Path
-    album: UUID
-    media_type: Literal["photos", "videos", "both"]
-    always_restart_videos: bool
-
-    @field_validator("video_path")
-    @classmethod
-    def readable_video(cls, value: Path) -> Path:
-        """Reject missing, relative, or unreadable paths for either source."""
-        _ = cls
-        path = value.expanduser()
-        if not path.is_absolute() or not path.is_file() or not access(path, R_OK):
-            raise ValueError("video_path must be an existing readable absolute file")
-        return path
-
-    @classmethod
-    def defaults(cls) -> PlaybackControls:
-        """Construct complete defaults from eagerly validated environment settings."""
-        return cls(
-            source=SETTINGS.vsmp_source,
-            playback_enabled=SETTINGS.vsmp_playback_enabled,
-            video_interval=SETTINGS.vsmp_video_frame_delay_seconds,
-            photo_interval=SETTINGS.vsmp_photo_frame_delay_seconds,
-            frame_advance=SETTINGS.vsmp_video_frame_advance,
-            gamma=SETTINGS.vsmp_image_gamma,
-            video_path=SETTINGS.vsmp_video_path,
-            album=SETTINGS.immich_album_id,
-            media_type=SETTINGS.immich_media_type,
-            always_restart_videos=SETTINGS.always_restart_videos,
-        )
 
 
 def load_controls() -> tuple[PlaybackControls, set[str]]:
@@ -75,12 +18,11 @@ def load_controls() -> tuple[PlaybackControls, set[str]]:
     initialize()
     connection = connect()
     try:
-        overrides = {
-            name: loads(value)
-            for name, value in connection.execute(
-                "SELECT name, value FROM control_overrides"
-            )
-        }
+        rows = cast(
+            "list[tuple[str, str]]",
+            connection.execute("SELECT name, value FROM control_overrides").fetchall(),
+        )
+        overrides = {name: loads(value) for name, value in rows}
     finally:
         connection.close()
     if not all(name in CONTROL_NAMES for name in overrides):
@@ -99,17 +41,19 @@ def save_controls(controls: PlaybackControls, overridden: set[str]) -> None:
     connection = connect()
     try:
         with connection:
-            existing = {
-                row[0] for row in connection.execute("SELECT name FROM control_overrides")
-            }
-            connection.executemany(
+            rows = cast(
+                "list[tuple[str]]",
+                connection.execute("SELECT name FROM control_overrides").fetchall(),
+            )
+            existing = {row[0] for row in rows}
+            _ = connection.executemany(
                 "DELETE FROM control_overrides WHERE name = ?",
                 ((name,) for name in existing - overridden),
             )
-            connection.executemany(
-                "INSERT INTO control_overrides(name, value) VALUES (?, ?) "
-                "ON CONFLICT(name) DO UPDATE SET value=excluded.value "
-                "WHERE value IS NOT excluded.value",
+            _ = connection.executemany(
+                """INSERT INTO control_overrides(name, value) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET value=excluded.value
+                WHERE value IS NOT excluded.value""",
                 ((key, dumps(values[key])) for key in overridden),
             )
     finally:
