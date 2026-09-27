@@ -84,7 +84,7 @@ class EPaperDisplay:
         self.pi.digital_write(self.cs_pin, value=True)
 
     def send_data_block(self, data: bytes) -> None:
-        """Transfer a contiguous data payload with one GPIO and SPI call."""
+        """Transfer a contiguous payload with fixed GPIO and one bulk SPI call."""
         self.pi.digital_write(self.dc_pin, value=True)
         self.pi.digital_write(self.cs_pin, value=False)
         try:
@@ -162,10 +162,15 @@ class EPaperDisplay:
                 return rotated.tobytes()
 
     def display(self, image: bytes) -> None:
-        """Display the image."""
+        """Write complementary OLD/NEW RAM planes and refresh the display."""
         frame_bytes = self.WIDTH * self.HEIGHT // 8
         if len(image) != frame_bytes:
             raise ValueError(f"Display buffer must contain {frame_bytes} bytes")
+        # getbuffer returns Pillow's bits (1=white). The panel's NEW plane
+        # uses inverted bits, while the OLD plane needs the complement.
+        self.send_command(0x10)
+        self.send_data_block(image)
+
         self.send_command(0x13)
         self.send_data_block(bytes(value ^ 0xFF for value in image))
 
@@ -175,12 +180,12 @@ class EPaperDisplay:
 
     def clear(self) -> None:
         """Clear the display."""
-        blank = bytes(self.WIDTH * self.HEIGHT // 8)
+        frame_bytes = self.WIDTH * self.HEIGHT // 8
         self.send_command(0x10)
-        self.send_data_block(blank)
+        self.send_data_block(bytes([0xFF]) * frame_bytes)
 
         self.send_command(0x13)
-        self.send_data_block(blank)
+        self.send_data_block(bytes(frame_bytes))
 
         self.send_command(0x12)
         self.pi.delay_ms(100)
