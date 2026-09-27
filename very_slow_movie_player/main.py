@@ -74,6 +74,13 @@ def extract_frame(
     """
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
+    if (
+        video_path.exists()
+        and extract_output_path.exists()
+        and extract_output_path.samefile(video_path)
+    ):
+        raise ValueError("Frame output path must differ from the input video")
+
     extract_output_path.parent.mkdir(parents=True, exist_ok=True)
     # Remove the previous frame before seeking: ffmpeg can exit successfully at EOF
     # without writing a new file.
