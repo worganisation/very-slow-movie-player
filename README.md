@@ -54,6 +54,24 @@ structured album filter and cursor.
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
 brightness, or increase it for a darker image.
 
+## YouTube playlist downloads
+
+Set `YT_PLAYLIST_ID` to a public playlist ID and run
+`uv run python very_slow_movie_player/youtube.py`. The downloader creates
+`very_slow_movie_player/.media/`, fetches every page of the playlist, and saves
+videos as MP4 files with their YouTube IDs in the filenames. Its
+`.youtube-download-archive.txt` records successfully downloaded IDs so later
+runs skip them. Unavailable videos are skipped while the rest of the playlist
+continues; the command exits nonzero if any download fails. `YT_API_KEY` is no
+longer needed.
+
+YouTube downloads also require system `ffmpeg` and `ffprobe`, plus a JavaScript
+runtime for yt-dlp's bundled `yt-dlp-ejs` challenge solver. Install
+[Deno 2.3+](https://github.com/yt-dlp/yt-dlp/wiki/EJS) on the Pi (enabled by
+yt-dlp by default). See the linked guide if using another supported runtime.
+Existing videos from the old downloader are not in the archive, so the first
+run may download those videos again.
+
 Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
 missing, startup fails so the service does not report a working display that
 is only a software mock. For local development without a panel, set

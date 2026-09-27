@@ -14,7 +14,7 @@ dependencies = [
   "wg-utilities[loggers]>=5.17.4,<6",
   "pydantic>=2.13.5,<3",
   "httpx>=0.28.1,<0.29",
-  "youtube-dl-nightly>=2024.8.7,<2025",
+  "yt-dlp[default]>=2026.8.19,<2027",
 ]
 
 [tool.uv]
@@ -116,7 +116,7 @@ exclude-deps = [
   "pillow",
   "rpi-gpio",
   "spidev",
-  "youtube-dl-nightly",
+  "yt-dlp",
 ]
 
 [tool.semantic_release]

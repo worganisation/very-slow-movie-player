@@ -93,7 +93,7 @@ hooks = [
     additional_dependencies = [
       "pydantic==2.13.5",
       "wg-utilities[loggers]==5.17.4",
-      "youtube-dl-nightly==2024.8.7",
+      "yt-dlp[default]==2026.8.19",
       "Pillow==12.3.0",
       "httpx==0.28.1",
       "types-RPi.GPIO",
