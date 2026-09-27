@@ -16,7 +16,7 @@ from time import sleep
 from typing import TYPE_CHECKING, NoReturn
 
 from immich import Asset, ImmichAlbum
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
 from utils.progress import get_progress, load_progress, set_progress
@@ -130,25 +130,29 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
         frame_output_path,
     )
 
-    pil_im = Image.open(image_path)
-
-    scale_factor = min(DISPLAY.WIDTH / pil_im.size[0], DISPLAY.HEIGHT / pil_im.size[1])
-
-    resize_width = round(pil_im.size[0] * scale_factor)
-    resize_height = round(pil_im.size[1] * scale_factor)
-
-    letterboxed = Image.new("RGB", (DISPLAY.WIDTH, DISPLAY.HEIGHT))
-    offset = (
-        round((DISPLAY.WIDTH - resize_width) / 2),
-        round((DISPLAY.HEIGHT - resize_height) / 2),
-    )
-
-    letterboxed.paste(
-        pil_im.resize((resize_width, resize_height), Resampling.LANCZOS),
-        offset,
-    )
-
-    letterboxed.save(frame_output_path)
+    with Image.open(image_path) as source:
+        oriented = ImageOps.exif_transpose(source)
+        if oriented is None:
+            raise RuntimeError("Could not orient the input image")
+        with oriented:
+            scale_factor = min(
+                DISPLAY.WIDTH / oriented.width,
+                DISPLAY.HEIGHT / oriented.height,
+            )
+            resize_width = max(1, round(oriented.width * scale_factor))
+            resize_height = max(1, round(oriented.height * scale_factor))
+            offset = (
+                round((DISPLAY.WIDTH - resize_width) / 2),
+                round((DISPLAY.HEIGHT - resize_height) / 2),
+            )
+            with (
+                Image.new("RGB", (DISPLAY.WIDTH, DISPLAY.HEIGHT)) as letterboxed,
+                oriented.resize(
+                    (resize_width, resize_height), Resampling.LANCZOS
+                ) as resized,
+            ):
+                letterboxed.paste(resized, offset)
+                letterboxed.save(frame_output_path)
 
     return frame_output_path
 
@@ -173,14 +177,17 @@ def display_image(
     gamma = float(getenv("VSMP_IMAGE_GAMMA", "1.7"))
     if gamma <= 0:
         raise ValueError("VSMP_IMAGE_GAMMA must be positive")
-    grayscale = Image.open(output_path).convert("L")
-    darkened = grayscale.point(
-        [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
-    )
-    pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)
+    with (
+        Image.open(output_path) as formatted,
+        formatted.convert("L") as grayscale,
+        grayscale.point(
+            [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
+        ) as darkened,
+        darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
+    ):
+        buffer = DISPLAY.getbuffer(monochrome)
 
-    # display the image
-    DISPLAY.display(DISPLAY.getbuffer(pil_im))
+    DISPLAY.display(buffer)
 
     sleep(display_time)
 
