@@ -581,10 +581,36 @@ def play_immich_source(runtime: PlaybackRuntime) -> None:
             ):
                 continue
             seen = True
-            play_immich_asset(runtime, album, asset)
+            play_asset_with_retry(runtime, album, asset, selected)
         if not seen and runtime.selection == selected:
             runtime.mqtt.state("playback_status", "waiting for media")
             _ = runtime.mailbox.wake.wait(60)
+
+
+def play_asset_with_retry(
+    runtime: PlaybackRuntime,
+    album: ImmichAlbum,
+    asset: Asset,
+    selection: tuple[str, Path, str, str],
+) -> None:
+    """Allow Next to skip a failing Immich asset without clearing the panel."""
+    while runtime.selection == selection:
+        try:
+            play_immich_asset(runtime, album, asset)
+        except PanelRefreshError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - media/network failures are recoverable
+            LOGGER.warning("Immich asset failed; retaining current frame: %s", exc)
+            runtime.mqtt.state("last_error", str(exc)[:255])
+            runtime.mqtt.state("playback_status", "source error")
+            runtime.mqtt.state("next_refresh", "unknown")
+            _ = runtime.mailbox.wake.wait(60)
+            runtime.process_commands()
+            if "next" in runtime.buttons:
+                runtime.buttons.discard("next")
+                return
+        else:
+            return
 
 
 def play_selected_source(runtime: PlaybackRuntime) -> None:
@@ -600,6 +626,7 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
         LOGGER.warning("Media source failed; retaining current frame: %s", exc)
         runtime.mqtt.state("last_error", str(exc)[:255])
         runtime.mqtt.state("playback_status", "source error")
+        runtime.mqtt.state("next_refresh", "unknown")
         _ = runtime.mailbox.wake.wait(60)
 
 
