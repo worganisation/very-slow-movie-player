@@ -142,8 +142,9 @@ def render_caption(
     caption_font, lines, line_height = _layout(
         text, font, font_size, _SIZE[0] - 48, _MARGIN_HEIGHT - 16
     )
+    paper = 1 if background == "light" else 0
     if style == "margin":
-        result = Image.new("1", _SIZE, color=1)
+        result = Image.new("1", _SIZE, color=paper)
         photo_height = _SIZE[1] - _MARGIN_HEIGHT
         photo_width = round(image.width * photo_height / image.height)
         with (
@@ -158,7 +159,6 @@ def render_caption(
         result = image.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
 
     draw = ImageDraw.Draw(result)
-    paper = 1 if background == "light" else 0
     ink = 1 - paper
     draw.rectangle((0, _SIZE[1] - _MARGIN_HEIGHT, _SIZE[0], _SIZE[1]), fill=paper)
     block_top = (

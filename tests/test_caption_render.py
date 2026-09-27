@@ -80,15 +80,19 @@ class CaptionRenderTests(unittest.TestCase):
         with self.assertRaisesRegex(CaptionLayoutError, "does not fit"):
             render_caption(self.frame, "W" * 100)
 
-    def test_background_changes_only_band_and_keeps_contrasting_glyphs(self) -> None:
-        """Both layouts invert the caption band without changing photo pixels."""
+    def test_background_colors_margins_and_band_without_changing_photo(self) -> None:
+        """Background colors surround the preserved photo and contrast with glyphs."""
         for style in ("margin", "overlay"):
             light = render_caption(self.frame, "Hello!", style=style, background="light")
             dark = render_caption(self.frame, "Hello!", style=style, background="dark")
+            photo_box = (80, 0, 720, 384) if style == "margin" else (0, 0, 800, 384)
             self.assertEqual(
-                light.crop((0, 0, 800, 384)).tobytes(),
-                dark.crop((0, 0, 800, 384)).tobytes(),
+                light.crop(photo_box).tobytes(), dark.crop(photo_box).tobytes()
             )
+            if style == "margin":
+                for margin in ((0, 0, 80, 384), (720, 0, 800, 384)):
+                    self.assertEqual(light.crop(margin).getextrema(), (1, 1))
+                    self.assertEqual(dark.crop(margin).getextrema(), (0, 0))
             band = dark.crop((0, 384, 800, 480))
             self.assertEqual(band.getpixel((0, 0)), 0)
             self.assertIn(1, band.get_flattened_data())
