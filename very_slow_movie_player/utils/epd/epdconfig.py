@@ -33,11 +33,10 @@ THE SOFTWARE.
 from __future__ import annotations
 
 from logging import debug
+from os import getenv
 from time import sleep
 from typing import Literal
 from unittest.mock import MagicMock
-
-from utils import const
 
 
 class RaspberryPi:
@@ -58,9 +57,12 @@ class RaspberryPi:
 
             # SPI device, bus = 0, device = 0
             self.spi = SpiDev(0, 0)
-        except ImportError:
-            if const.HOSTNAME == "mtrxpi":
-                raise
+        except ImportError as exc:
+            if getenv("VSMP_ALLOW_MOCK_HARDWARE", "false").casefold() != "true":
+                raise RuntimeError(
+                    "Display hardware is unavailable; install RPi.GPIO and spidev, "
+                    "or set VSMP_ALLOW_MOCK_HARDWARE=true for local development",
+                ) from exc
 
             self.gpio = MagicMock()
             self.spi = MagicMock()
