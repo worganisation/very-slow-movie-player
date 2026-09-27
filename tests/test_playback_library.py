@@ -47,6 +47,38 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_import_fields_allow_empty_state_and_reannounce_after_restart(self) -> None:
+        """Blank request fields remain valid after startup, clearing and HA birth."""
+        import json
+
+        from mqtt_controls import HAClient
+
+        for _ in range(2):  # Fresh instances represent process restarts.
+            client = HAClient(self.controls.CommandMailbox())
+            client.client = Mock()
+            client.client.is_connected.return_value = True
+            for announce in range(2):  # Reannouncement also serves reconnect/HA birth.
+                if announce:
+                    client.state("import_jellyfin", "")
+                    client.state("import_youtube", "")
+                    client.client.reset_mock()
+                client._announce()
+                publications = client.client.publish.call_args_list
+                for name in ("import_jellyfin", "import_youtube"):
+                    topic = (
+                        f"{client.discovery}/text/vsmp_{client.device_id}_{name}/config"
+                    )
+                    config = next(
+                        json.loads(call.args[1])
+                        for call in publications
+                        if call.args[0] == topic
+                    )
+                    self.assertEqual(config["min"], 0)
+                    client.client.publish.assert_any_call(
+                        f"{client.root}/state/{name}", "", qos=1, retain=True
+                    )
+                self.assertEqual(client.mailbox.drain(), ({}, set()))
+
     def test_caption_controls_validate_and_persist(self) -> None:
         """Caption values survive SQLite restart while invalid settings are rejected."""
         import sqlite3
