@@ -6,9 +6,8 @@ from pathlib import Path  # noqa: TC003 - runtime Path default
 from typing import NotRequired, TypedDict, cast
 
 from storage import connect, initialize
-from wg_utilities.loggers import get_streaming_logger
 
-LOGGER = get_streaming_logger(__name__)
+from .logging import logger
 
 
 class ProgressInfo(TypedDict):
@@ -43,7 +42,7 @@ def load_progress() -> dict[str, ProgressInfo]:
 
 def get_progress(video_path: Path, default: int = 0) -> int:
     """Return the last displayed frame, or the default for a new video."""
-    LOGGER.info("Getting progress for `%s`", video_path)
+    logger.info("Getting progress for `{}`", video_path)
     progress = load_progress().get(video_path.as_posix())
     return progress["current"] if progress is not None else default
 

@@ -218,16 +218,27 @@ class HAClient:
         for name, label in (
             ("playback_status", "Playback status"),
             ("current_media", "Current media"),
-            ("video_position", "Video position"),
+            ("video_current_frame", "Video current frame"),
+            ("video_frame_count", "Video frame count"),
             ("last_refresh", "Last successful refresh"),
             ("next_refresh", "Next scheduled refresh"),
             ("last_error", "Last error"),
         ):
             extra: dict[str, object] = {}
+            if name in {"video_current_frame", "video_frame_count"}:
+                extra["state_class"] = "measurement"
             if name in {"last_refresh", "next_refresh"}:
                 extra["device_class"] = "timestamp"
             self._entity(
                 "sensor", name, label, state_topic=f"{self.root}/state/{name}", **extra
+            )
+        # Remove the retained discovery entry for the superseded combined sensor.
+        if self.client.is_connected():
+            _ = self.client.publish(
+                f"{self.discovery}/sensor/vsmp_{self.device_id}_video_position/config",
+                b"",
+                qos=1,
+                retain=True,
             )
         self._entity(
             "image",

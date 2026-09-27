@@ -34,14 +34,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from importlib import import_module
-from logging import getLogger
 from time import sleep
 from typing import ClassVar, Literal, Protocol, cast
 from unittest.mock import MagicMock
 
 from settings import SETTINGS
-
-LOGGER = getLogger(__name__)
+from utils.logging import logger
 
 
 class GPIOInterface(Protocol):
@@ -167,12 +165,12 @@ class RaspberryPi:
             # GPIO may have configured only some pins. Avoid module_exit's pin writes.
             try:
                 self.spi.close()
-            except BaseException:
-                LOGGER.exception("Failed to close SPI after display setup failed")
+            except BaseException:  # noqa: BLE001 - release all partial hardware
+                logger.exception("Failed to close SPI after display setup failed")
             try:
                 self.gpio.cleanup()
-            except BaseException:
-                LOGGER.exception("Failed to release GPIO after display setup failed")
+            except BaseException:  # noqa: BLE001 - release all partial hardware
+                logger.exception("Failed to release GPIO after display setup failed")
             raise
         self.module_initialized = True
         return 0
@@ -190,11 +188,11 @@ class RaspberryPi:
         ):
             try:
                 cleanup()
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001 - finish all hardware cleanup
                 if first_error is None:
                     first_error = exc
                 else:
-                    LOGGER.exception("Additional display hardware cleanup failure")
+                    logger.exception("Additional display hardware cleanup failure")
         self.module_initialized = False
         if first_error is not None:
             raise first_error

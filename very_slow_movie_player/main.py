@@ -26,9 +26,8 @@ from mqtt_controls import HAClient
 from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
+from utils.logging import logger
 from utils.progress import get_progress, load_progress, set_progress
-from wg_utilities.decorators import process_exception
-from wg_utilities.loggers import get_streaming_logger
 
 from ffmpeg import input as ffmpeg_input
 from ffmpeg import probe
@@ -38,9 +37,6 @@ if TYPE_CHECKING:
 
     from ffmpeg import ProbeInfo, ProbeStream
 
-LOGGER = get_streaming_logger(__name__)
-
-
 DISPLAY = EPaperDisplay()
 
 
@@ -48,7 +44,7 @@ class PanelRefreshError(Exception):
     """A hardware failure that should stop playback for systemd recovery."""
 
 
-@process_exception(logger=LOGGER)
+@logger.catch(reraise=True)
 def extract_frame(
     video_path: Path,
     frame: int,
@@ -86,7 +82,7 @@ def extract_frame(
     Returns:
         str: the output path, again provided for ease of use
     """
-    LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
+    logger.info("Extracting frame #{} from `{}`", frame, video_path)
 
     if (
         video_path.exists()
@@ -126,7 +122,7 @@ def extract_frame(
     return extract_output_path
 
 
-@process_exception(logger=LOGGER)
+@logger.catch(reraise=True)
 def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -> Path:
     """Formats an image for displaying on the EPD.
 
@@ -138,8 +134,8 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
         str: the output path - the user will know this anyway, but it's done for ease
          of use
     """
-    LOGGER.debug(
-        "Formatting image `%s`, outputting to `%s`",
+    logger.debug(
+        "Formatting image `{}`, outputting to `{}`",
         image_path,
         frame_output_path,
     )
@@ -169,7 +165,7 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
     return frame_output_path
 
 
-@process_exception(logger=LOGGER)
+@logger.catch(reraise=True)
 def display_image(
     image_path: Path,
     gamma: float,
@@ -184,7 +180,7 @@ def display_image(
     """
     output_path = format_image(image_path)
 
-    LOGGER.info("Displaying `%s`", image_path)
+    logger.info("Displaying `{}`", image_path)
 
     # Darken midtones before dithering so they remain visible on the E-paper panel.
     with (
@@ -205,8 +201,8 @@ def display_image(
                 monochrome.save(png, format="PNG")
                 mqtt.image(png.getvalue())
         except Exception as exc:  # noqa: BLE001 - reporting must not interrupt playback
-            LOGGER.warning(
-                "MQTT image update failed after display: %s", type(exc).__name__
+            logger.warning(
+                "MQTT image update failed after display: {}", type(exc).__name__
             )
 
 
@@ -284,14 +280,16 @@ class PlaybackRuntime:
         self.current_path: Path | None = None
         self.current_kind: str = "video"
         self.current_media: str = "none"
-        self.current_position: str = "none"
+        self.current_frame: int | None = None
+        self.current_frame_count: int | None = None
         self.current_video: tuple[Path, int, float, int] | None = None
         self.next_album_refresh: float = 0
         self.selection: tuple[str, Path, str, str] = self.selection_key()
         self.buttons: set[str] = set()
         self.mqtt.state("playback_status", "starting")
         self.mqtt.state("current_media", "none")
-        self.mqtt.state("video_position", "none")
+        self.mqtt.state("video_current_frame", "None")
+        self.mqtt.state("video_frame_count", "None")
         self.mqtt.state("last_error", "none")
         self.mqtt.state("last_refresh", "None")
         self.mqtt.state("next_refresh", "None")
@@ -391,7 +389,8 @@ class PlaybackRuntime:
         self,
         path: Path,
         media: str,
-        position: str = "none",
+        current_frame: int | None = None,
+        frame_count: int | None = None,
         *,
         kind: str = "video",
         video_frame: tuple[Path, int, float, int] | None = None,
@@ -401,10 +400,17 @@ class PlaybackRuntime:
         self.current_path = path
         self.current_kind = kind
         self.current_media = media
-        self.current_position = position
+        self.current_frame = current_frame
+        self.current_frame_count = frame_count
         self.current_video = video_frame
-        self.mqtt.state("current_media", media[:255])
-        self.mqtt.state("video_position", position)
+        self.mqtt.state("current_media", Path(media).stem[:255])
+        self.mqtt.state(
+            "video_current_frame",
+            str(current_frame) if current_frame is not None else "None",
+        )
+        self.mqtt.state(
+            "video_frame_count", str(frame_count) if frame_count is not None else "None"
+        )
         self.mqtt.state("last_refresh", datetime.now(UTC).isoformat())
         self.mqtt.state("playback_status", "playing")
         self.mqtt.state("last_error", "none")
@@ -432,7 +438,8 @@ class PlaybackRuntime:
                 self.mark_displayed(
                     image_path,
                     self.current_media,
-                    self.current_position,
+                    self.current_frame,
+                    self.current_frame_count,
                     kind=self.current_kind,
                     video_frame=self.current_video,
                 )
@@ -512,7 +519,8 @@ def play_video(
         runtime.mark_displayed(
             output,
             media_label or str(video_path),
-            f"{frame + 1}/{frame_count}",
+            frame + 1,
+            frame_count,
             video_frame=(video_path, frame, fps, stream_index),
         )
         set_progress(video_path, frame, frame_count)
@@ -526,7 +534,7 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
     if runtime.controls.media_type == "videos" and asset.kind != "VIDEO":
         return
     media = album.download(asset)
-    media_label = f"{asset.filename} [{asset.id}]"
+    media_label = asset.filename
     if asset.kind == "VIDEO":
         play_video(runtime, media, immich=True, media_label=media_label)
         return
@@ -559,14 +567,14 @@ def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None)
             cleanup_error = exc
     try:
         DISPLAY.pi.module_exit()
-    except BaseException as exc:
+    except BaseException as exc:  # noqa: BLE001 - finish cleanup after SIGTERM
         if cleanup_error is None:
             cleanup_error = exc
         else:
-            LOGGER.exception("Additional failure releasing display hardware")
+            logger.exception("Additional failure releasing display hardware")
     if cleanup_error is not None:
         if previous_error is not None:
-            LOGGER.error("Display cleanup also failed: %s", cleanup_error)
+            logger.error("Display cleanup also failed: {}", cleanup_error)
         else:
             raise cleanup_error
 
@@ -609,7 +617,7 @@ def play_asset_with_retry(
         except PanelRefreshError:
             raise
         except Exception as exc:  # noqa: BLE001 - media/network failures are recoverable
-            LOGGER.warning("Immich asset failed; retaining current frame: %s", exc)
+            logger.warning("Immich asset failed; retaining current frame: {}", exc)
             runtime.mqtt.state("last_error", str(exc)[:255])
             runtime.mqtt.state("playback_status", "source error")
             runtime.mqtt.state("next_refresh", "None")
@@ -632,14 +640,14 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
     except PanelRefreshError:
         raise
     except Exception as exc:  # noqa: BLE001 - source errors retain the last panel image
-        LOGGER.warning("Media source failed; retaining current frame: %s", exc)
+        logger.warning("Media source failed; retaining current frame: {}", exc)
         runtime.mqtt.state("last_error", str(exc)[:255])
         runtime.mqtt.state("playback_status", "source error")
         runtime.mqtt.state("next_refresh", "None")
         _ = runtime.mailbox.wake.wait(60)
 
 
-@process_exception(logger=LOGGER)
+@logger.catch(reraise=True)
 def main() -> None:
     """Run a single hardware owner with a persistent, asynchronous MQTT client."""
     runtime = PlaybackRuntime()
@@ -655,7 +663,7 @@ def main() -> None:
             runtime.mqtt.start()
             mqtt_started = True
         except (ConnectionError, OSError) as exc:
-            LOGGER.warning("MQTT startup failed; playback continues: %s", exc)
+            logger.warning("MQTT startup failed; playback continues: {}", exc)
         while True:
             runtime.process_commands()
             play_selected_source(runtime)
