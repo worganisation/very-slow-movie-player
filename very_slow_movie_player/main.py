@@ -399,11 +399,11 @@ class PlaybackRuntime:
         self.last_panel_refresh = monotonic()
         self.current_path = path
         self.current_kind = kind
-        self.current_media = Path(media).name
+        self.current_media = media
         self.current_frame = current_frame
         self.current_frame_count = frame_count
         self.current_video = video_frame
-        self.mqtt.state("current_media", self.current_media[:255])
+        self.mqtt.state("current_media", Path(media).stem[:255])
         self.mqtt.state(
             "video_current_frame",
             str(current_frame) if current_frame is not None else "None",
