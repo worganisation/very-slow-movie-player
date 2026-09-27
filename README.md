@@ -24,6 +24,10 @@ MQTT_DEVICE_ID=vsmp_pi
 MQTT_DEVICE_NAME=Very Slow Movie Player
 VSMP_IMAGE_GAMMA=1.7
 VSMP_VIDEO_FRAME_DELAY_SECONDS=180
+VSMP_PHOTO_FRAME_DELAY_SECONDS=300
+VSMP_VIDEO_FRAME_ADVANCE=12
+IMMICH_MEDIA_TYPE=both
+VSMP_PLAYBACK_ENABLED=true
 ALWAYS_RESTART_VIDEOS=false
 VSMP_ALLOW_MOCK_HARDWARE=false
 ```
@@ -48,10 +52,12 @@ directory is created on first run. The video loops after its final frame when
 systemd restarts the service.
 
 `VSMP_VIDEO_FRAME_DELAY_SECONDS` sets the wait after each video frame for both
-local videos and Immich videos. It defaults to 180 seconds and must be a finite
-number of at least 180. Immich still images continue to display for five
-minutes. This setting does not govern the startup clear or empty-album checks,
-so it does not promise a minimum interval between every panel refresh.
+local videos and Immich videos. It defaults to 180 seconds. Still images use
+`VSMP_PHOTO_FRAME_DELAY_SECONDS` (default 300 seconds). Both accept finite values
+from 180 to 86400 seconds. `VSMP_VIDEO_FRAME_ADVANCE` defaults to 12 source
+frames per update. The startup clear is a separate panel operation; the
+playback scheduler enforces at least 180 seconds between completed frame
+refreshes, including button requests.
 
 Progress is saved by replacing the log atomically. If the JSON is damaged,
 VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
@@ -80,7 +86,7 @@ structured album filter and cursor.
 
 `VSMP_IMAGE_GAMMA` controls midtone darkening before the frame is dithered for
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
-brightness, or increase it for a darker image.
+brightness, or increase it for a darker image. The accepted range is 0.1 to 10.
 
 Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
 missing, startup fails so the service does not report a working display that
@@ -104,28 +110,57 @@ display quality before enabling revision-specific fast/partial modes.
 Frame packing and SPI block writes reduce Python and GPIO transfer overhead.
 The panel still uses its normal full refresh, including its visible flash.
 
-### Home Assistant displayed image
+### Home Assistant controls
 
-Configure `MQTT_HOST` to reach the broker used by Home Assistant. After the
-panel accepts a frame, VSMP publishes that exact monochrome, dithered image as
-raw PNG bytes to `vsmp/vsmp_pi/displayed_frame` and publishes retained MQTT
-image discovery to `homeassistant/image/vsmp_vsmp_pi_displayed_frame/config`.
-Both messages use QoS 1 and are retained, so Home Assistant can recover the
-last successfully published frame after it restarts. The entity belongs to a
-**Very Slow Movie Player** device and is named **Displayed frame**. Change
-`MQTT_DEVICE_ID` to a stable ID unique to this panel if you have more than one.
-Changing the ID or topic prefixes creates a new discovery topic; remove the
-old retained config manually if you rename an existing device.
+Set `MQTT_HOST` to the Home Assistant broker. VSMP maintains one MQTT connection
+throughout playback, reconnects and republishes discovery/state after broker
+outages or Home Assistant birth, and keeps playing when MQTT is unavailable.
+Discovery uses the stable device ID `vsmp_pi` by default. The existing
+**Displayed frame** image keeps its identity and retained PNG topic; it remains
+visible even when the service disconnects. Control and status entities use an
+availability topic and become unavailable when the service disconnects.
 
-The retained image is viewable by anyone with broker read access to its topic.
-Keep broker credentials and the Pi's `.env` private. For an authenticated
-broker, set both `MQTT_USERNAME` and `MQTT_PASSWORD`; the password is hidden in
-validation errors. For a TLS broker, set `MQTT_TLS=true` and its port (normally
-`8883`); the system CA store verifies its certificate. MQTT failures are logged
-without stopping playback. The entity shows the last successfully published
-frame during a broker outage or service stop; it does not report startup
-clearing or guarantee instant panel state when reporting fails. No availability
-topic is sent, because the e-paper display keeps its image without power.
+The device exposes Source, Playback enabled, Video refresh interval, Photo
+refresh interval, Video frame advance, Image gamma, Local video, Immich album,
+Immich media type, and Always restart videos. The album selector shows names
+from Immich and disambiguates duplicates with IDs; the selected value is stored
+as an immutable album UUID. `IMMICH_MEDIA_TYPE` defaults to `both` and accepts
+`photos` or `videos`. The controls act without a service restart. Pausing leaves
+the current physical image in place. Source changes wake a playback wait but
+cannot interrupt an active panel refresh. An edited gamma takes effect on the
+next frame; use **Redisplay current frame** to show it sooner. **Next** advances
+one video step or skips the displayed Immich asset, and **Restart current video**
+starts that video's frame position at zero. Manual requests coalesce and wait
+for the same 180-second panel minimum. Playback status, current displayed media,
+video position, last successful refresh, next scheduled refresh, and last error
+are reported as sensors. Configured source and current displayed media are
+separate while a source change is pending.
+
+All commands use `vsmp/vsmp_pi/command/...`; confirmed states use
+`vsmp/vsmp_pi/state/...`. Discovery and state are retained; commands are not.
+Retained command replays are ignored. Invalid commands leave the last valid
+setting in place and update **Last error**. The Local video command must specify
+an absolute readable path containing a playable video stream. Immich album
+options require the API key's album read permission in addition to the asset
+permissions listed above. Broker outages do not stop playback. The most recent
+successfully displayed frame is republished when MQTT reconnects.
+
+The service eagerly validates the entire `.env` configuration, including
+inactive sources. Home Assistant changes are persisted atomically as non-secret
+overrides in `very_slow_movie_player/.media/ha_controls.json` on the Pi. Systemd
+environment overrides `.env`; only keys present in `ha_controls.json` override
+those validated environment defaults. Remove one key from this file while the
+service is stopped to restore its environment value, or remove the file to
+restore all environment defaults. Keep the file and `.env` private. A malformed
+or invalid override file stops startup so an operator can repair it safely.
+Never put the Immich API key, broker password, or other secrets in that file.
+
+For authenticated MQTT, set both `MQTT_USERNAME` and `MQTT_PASSWORD`; for TLS,
+set `MQTT_TLS=true` and the broker port. The system CA store verifies the broker
+certificate. Broker readers can access the retained frame image. Changing the
+MQTT device ID or prefixes creates new discovery topics; remove obsolete
+retained configs manually after a rename. No deployment or physical panel
+validation is implied by these controls.
 
 ## YouTube playlist downloads
 
