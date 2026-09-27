@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 from os import environ
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, NotRequired, TypedDict
 
 from httpx import get
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 from pydantic.alias_generators import to_camel
 from utils import const
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
-from youtube_dl import YoutubeDL  # type: ignore[import-untyped]
+from youtube_dl import YoutubeDL
 
 LOGGER = get_streaming_logger(__name__)
+
+
+class PlaylistItem(TypedDict):
+    """The typed part of a YouTube playlist item used here."""
+
+    snippet: dict[str, object]
+
+
+class PlaylistResponse(TypedDict):
+    """Fields read from a YouTube playlist page."""
+
+    items: NotRequired[list[PlaylistItem]]
+    nextPageToken: NotRequired[str]
 
 
 class YouTubeVideoThumbnailInfo(BaseModel):
@@ -52,13 +65,14 @@ class YouTubeVideoInfo(BaseModel):
 
     @property
     def sanitized_title(self) -> str:
-        """Get a version of the title suitable for use as a file name.
+        """A version of the title suitable for use as a file name.
 
         Returns:
             str: the video title, with no characters that will break file names.
         """
         return (
-            self.title.replace("<", "_")
+            self.title
+            .replace("<", "_")
             .replace(">", "_")
             .replace(":", "_")
             .replace('"', "_")
@@ -95,13 +109,14 @@ def get_playlist_content(playlist_id: str) -> list[YouTubeVideoInfo]:
     if res.is_error:
         LOGGER.error(res.text)
 
-    res.raise_for_status()
+    _ = res.raise_for_status()
 
+    page = TypeAdapter(PlaylistResponse).validate_json(res.text)
     playlist_items = [
-        YouTubeVideoInfo.model_validate(v["snippet"]) for v in res.json().get("items", [])
+        YouTubeVideoInfo.model_validate(item["snippet"]) for item in page.get("items", [])
     ]
 
-    while token := res.json().get("nextPageToken"):
+    while token := page.get("nextPageToken"):
         res = get(
             "https://www.googleapis.com/youtube/v3/playlistItems",
             params={
@@ -114,11 +129,11 @@ def get_playlist_content(playlist_id: str) -> list[YouTubeVideoInfo]:
             timeout=10,
         )
 
+        _ = res.raise_for_status()
+        page = TypeAdapter(PlaylistResponse).validate_json(res.text)
         playlist_items.extend(
-            [
-                YouTubeVideoInfo.model_validate(v["snippet"])
-                for v in res.json().get("items", [])
-            ],
+            YouTubeVideoInfo.model_validate(item["snippet"])
+            for item in page.get("items", [])
         )
 
     return playlist_items
@@ -129,7 +144,7 @@ def main() -> None:
     """Iterate through the playlist and download each video."""
     playlist_id = environ["YT_PLAYLIST_ID"]
     with YoutubeDL(const.YDL_OPTS) as ydl:
-        ydl.download([
+        _ = ydl.download([
             f"https://www.youtube.com/watch?v={video.resource_id.video_id}"
             for video in get_playlist_content(playlist_id)
             if not (const.MEDIA_DIR / (video.sanitized_title + ".mp4")).is_file()

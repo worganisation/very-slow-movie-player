@@ -30,14 +30,24 @@ THE SOFTWARE.
 
 from __future__ import annotations
 
-from logging import debug
+from logging import getLogger
 from time import monotonic, sleep
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from .epdconfig import RaspberryPi
 
+LOGGER = getLogger(__name__)
+
 if TYPE_CHECKING:
     from PIL.Image import Image
+
+
+class PixelReader(Protocol):
+    """Read one monochrome pixel from a Pillow image."""
+
+    def __getitem__(self, _position: tuple[int, int]) -> int:
+        """Return a pixel value."""
+        ...
 
 
 class EPaperDisplay:
@@ -48,12 +58,12 @@ class EPaperDisplay:
     BUSY_TIMEOUT_SECONDS: Final = 30
 
     def __init__(self) -> None:
-        self.pi = RaspberryPi()
+        self.pi: RaspberryPi = RaspberryPi()
 
-        self.reset_pin = self.pi.RST_PIN
-        self.dc_pin = self.pi.DC_PIN
-        self.busy_pin = self.pi.BUSY_PIN
-        self.cs_pin = self.pi.CS_PIN
+        self.reset_pin: int = self.pi.RST_PIN
+        self.dc_pin: int = self.pi.DC_PIN
+        self.busy_pin: int = self.pi.BUSY_PIN
+        self.cs_pin: int = self.pi.CS_PIN
 
     # Hardware reset
     def reset(self) -> None:
@@ -81,7 +91,7 @@ class EPaperDisplay:
 
     def read_busy(self) -> None:
         """Read the busy signal."""
-        debug("e-Paper busy")
+        LOGGER.debug("e-Paper busy")
 
         deadline = monotonic() + self.BUSY_TIMEOUT_SECONDS
         self.send_command(0x71)
@@ -99,7 +109,7 @@ class EPaperDisplay:
 
     def init(self) -> int:
         """Initialize the display."""
-        self.pi.module_init()
+        _ = self.pi.module_init()
         # EPD hardware init start
         self.reset()
 
@@ -140,21 +150,21 @@ class EPaperDisplay:
         buf = [0xFF] * (int(self.WIDTH / 8) * self.HEIGHT)
         image_monocolor = image.convert("1")
         imwidth, imheight = image_monocolor.size
-        pixels = image_monocolor.load()
+        pixels = cast("PixelReader", image_monocolor.load())  # pyright: ignore[reportUnknownMemberType]
         if imwidth == self.WIDTH and imheight == self.HEIGHT:
-            debug("Vertical")
+            LOGGER.debug("Vertical")
             for y in range(imheight):
                 for x in range(imwidth):
                     # Set the bits for the column of pixels at the current position.
-                    if pixels[x, y] == 0:  # type: ignore[index]
+                    if pixels[x, y] == 0:
                         buf[int((x + y * self.WIDTH) / 8)] &= ~(0x80 >> (x % 8))
         elif imwidth == self.HEIGHT and imheight == self.WIDTH:
-            debug("Horizontal")
+            LOGGER.debug("Horizontal")
             for y in range(imheight):
                 for x in range(imwidth):
                     new_x = y
                     new_y = self.HEIGHT - x - 1
-                    if pixels[x, y] == 0:  # type: ignore[index]
+                    if pixels[x, y] == 0:
                         buf[int((new_x + new_y * self.WIDTH) / 8)] &= ~(0x80 >> (y % 8))
         return buf
 
