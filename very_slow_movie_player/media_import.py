@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 type JsonObject = dict[str, object]
 type JsonArray = list[object]
 _ENV_EXECUTABLE = "/usr/bin/env"
+_YOUTUBE_FORMAT = "bv[ext=mp4]+ba[ext=m4a]/bv+ba/b"
 
 _TEXT_CODECS = {"ass", "ssa", "srt", "subrip", "vtt", "webvtt"}
 
@@ -63,10 +64,10 @@ class ImportService:
         if not video_id or info.get("_type") in {"playlist", "multi_video"}:
             raise ValueError("URL must identify one video")
         title = str(info.get("title") or video_id)
-        # A progressive source retains its source timestamps; no video conversion occurs.
+        # Merge separate source streams without re-encoding the video.
         version = json.dumps(
             [
-                "progressive-original",
+                "merged-original",
                 info.get("format_id"),
                 info.get("duration"),
                 info.get("upload_date"),
@@ -604,7 +605,7 @@ class ImportService:
                 "--no-config",
                 "--no-playlist",
                 "--format",
-                "best[ext=mp4]/best",
+                _YOUTUBE_FORMAT,
                 "--dump-single-json",
                 url,
             ],
@@ -628,7 +629,9 @@ class ImportService:
                 "--no-config",
                 "--no-playlist",
                 "--format",
-                "best[ext=mp4]/best",
+                _YOUTUBE_FORMAT,
+                "--merge-output-format",
+                "mkv",
                 "--output",
                 str(stage / "video.%(ext)s"),
                 url,

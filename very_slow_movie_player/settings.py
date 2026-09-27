@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    vsmp_source: Literal["local", "immich"] = "local"
+    vsmp_source: Literal["local", "immich", "library"] = "local"
     vsmp_video_path: Path
     immich_url: AnyHttpUrl
     immich_api_key: SecretStr
@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     ] = "disabled"
     vsmp_captions_enabled: bool = True
     vsmp_caption_style: Literal["margin", "overlay"] = "margin"
+    vsmp_caption_background: Literal["light", "dark"] = "light"
     vsmp_caption_font: Literal["serif", "sans"] = "serif"
     vsmp_caption_font_size: Annotated[int, Field(ge=16, le=40)] = 26
     vsmp_caption_offset: Annotated[float, Field(ge=-60, le=60, allow_inf_nan=False)] = 0

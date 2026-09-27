@@ -81,7 +81,10 @@ class CommandMailbox:
 
     def submit(self, name: str, payload: str, *, retained: bool) -> None:
         """Ignore broker-replayed commands and wake playback for fresh input."""
-        if retained or name not in CONTROL_NAMES | BUTTON_NAMES:
+        if retained or name not in CONTROL_NAMES | BUTTON_NAMES | {
+            "import_youtube",
+            "import_jellyfin",
+        }:
             return
         with self._lock:
             if name in BUTTON_NAMES:
@@ -107,7 +110,7 @@ def apply_command(
     """Validate a single command without mutating the last good configuration."""
     if name not in CONTROL_NAMES:
         raise ValueError("Unknown control")
-    if name in {"playback_enabled", "always_restart_videos"}:
+    if name in {"playback_enabled", "always_restart_videos", "captions_enabled"}:
         if payload not in {"ON", "OFF"}:
             raise ValueError(f"{name} expects ON or OFF")
         value: object = payload == "ON"
