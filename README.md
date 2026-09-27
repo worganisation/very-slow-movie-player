@@ -15,16 +15,23 @@ IMMICH_URL=https://immich.example.com
 IMMICH_API_KEY=replace-with-private-api-key
 IMMICH_ALBUM_ID=00000000-0000-0000-0000-000000000000
 YT_PLAYLIST_ID=replace-with-public-playlist-id
+MQTT_HOST=homeassistant.local
+MQTT_PORT=1883
+MQTT_TLS=false
+MQTT_TOPIC_PREFIX=vsmp
+MQTT_DISCOVERY_PREFIX=homeassistant
+MQTT_DEVICE_ID=vsmp_pi
+MQTT_DEVICE_NAME=Very Slow Movie Player
 VSMP_IMAGE_GAMMA=1.7
 ALWAYS_RESTART_VIDEOS=false
 VSMP_ALLOW_MOCK_HARDWARE=false
 ```
 
-The first six values are required except `VSMP_SOURCE`, which defaults to
+The first seven values are required except `VSMP_SOURCE`, which defaults to
 `local`. `VSMP_VIDEO_PATH` must be an existing absolute file, `IMMICH_URL` an
 HTTP(S) server URL without credentials or query parameters, and
-`IMMICH_ALBUM_ID` a UUID. The API key and playlist ID must be nonblank. The
-last three values are optional and show their defaults. Invalid values fail
+`IMMICH_ALBUM_ID` a UUID. The API key, playlist ID, and bare `MQTT_HOST` must be
+nonblank. The remaining values are optional and show their defaults. Invalid values fail
 startup without printing the API key. Update the Pi's existing `.env` before
 deploying this version; the deployment health check will reject a service
 that cannot start. Environment variables supplied by systemd override the
@@ -73,6 +80,29 @@ is only a software mock. For local development without a panel, set
 `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop or playback
 failure, VSMP attempts to sleep the display and release its GPIO and SPI
 resources before exiting.
+
+### Home Assistant displayed image
+
+Configure `MQTT_HOST` to reach the broker used by Home Assistant. After the
+panel accepts a frame, VSMP publishes that exact monochrome, dithered image as
+raw PNG bytes to `vsmp/vsmp_pi/displayed_frame` and publishes retained MQTT
+image discovery to `homeassistant/image/vsmp_vsmp_pi_displayed_frame/config`.
+Both messages use QoS 1 and are retained, so Home Assistant can recover the
+last successfully published frame after it restarts. The entity belongs to a
+**Very Slow Movie Player** device and is named **Displayed frame**. Change
+`MQTT_DEVICE_ID` to a stable ID unique to this panel if you have more than one.
+Changing the ID or topic prefixes creates a new discovery topic; remove the
+old retained config manually if you rename an existing device.
+
+The retained image is viewable by anyone with broker read access to its topic.
+Keep broker credentials and the Pi's `.env` private. For an authenticated
+broker, set both `MQTT_USERNAME` and `MQTT_PASSWORD`; the password is hidden in
+validation errors. For a TLS broker, set `MQTT_TLS=true` and its port (normally
+`8883`); the system CA store verifies its certificate. MQTT failures are logged
+without stopping playback. The entity shows the last successfully published
+frame during a broker outage or service stop; it does not report startup
+clearing or guarantee instant panel state when reporting fails. No availability
+topic is sent, because the e-paper display keeps its image without power.
 
 ## YouTube playlist downloads
 

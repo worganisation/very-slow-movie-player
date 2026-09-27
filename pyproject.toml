@@ -14,6 +14,7 @@ dependencies = [
   "wg-utilities[loggers]>=5.17.4,<6",
   "pydantic>=2.13.5,<3",
   "pydantic-settings>=2.15.0,<3",
+  "paho-mqtt>=2.1.0,<3",
   "httpx2>=2.13.1,<3",
   "yt-dlp[default]>=2026.8.19,<2027",
 ]
@@ -114,6 +115,7 @@ deps-file = "pyproject.toml"
 sections = ["project.dependencies"]
 exclude-deps = [
   "ffmpeg-python",
+  "paho-mqtt", # creosote does not map `paho.mqtt` to its distribution name
   "pillow",
   "rpi-gpio",
   "spidev",
