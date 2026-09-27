@@ -2,9 +2,33 @@
 
 ## Media source
 
-`VSMP_SOURCE` selects `local` (the default) or `immich`. Local playback uses
-`VSMP_VIDEO_PATH` exactly as before. Keep the source settings in the Pi's
-private `.env`.
+`VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
+playlist command load the repository's private `.env` and validate **all**
+settings before playback, downloads, or GPIO startup. Populate the complete
+configuration before deploying, including a valid local video path, Immich
+credentials, and playlist ID even when their source is not selected:
+
+```dotenv
+VSMP_SOURCE=local
+VSMP_VIDEO_PATH=/home/worgarside/movies/example.mp4
+IMMICH_URL=https://immich.example.com
+IMMICH_API_KEY=replace-with-private-api-key
+IMMICH_ALBUM_ID=00000000-0000-0000-0000-000000000000
+YT_PLAYLIST_ID=replace-with-public-playlist-id
+VSMP_IMAGE_GAMMA=1.7
+ALWAYS_RESTART_VIDEOS=false
+VSMP_ALLOW_MOCK_HARDWARE=false
+```
+
+The first six values are required except `VSMP_SOURCE`, which defaults to
+`local`. `VSMP_VIDEO_PATH` must be an existing absolute file, `IMMICH_URL` an
+HTTP(S) server URL without credentials or query parameters, and
+`IMMICH_ALBUM_ID` a UUID. The API key and playlist ID must be nonblank. The
+last three values are optional and show their defaults. Invalid values fail
+startup without printing the API key. Update the Pi's existing `.env` before
+deploying this version; the deployment health check will reject a service
+that cannot start. Environment variables supplied by systemd override the
+same values in `.env`.
 
 ### Local video
 
@@ -18,23 +42,12 @@ Progress is saved by replacing the log atomically. If the JSON is damaged,
 VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
 warning to the service journal, and starts the video from the beginning.
 
-For example:
-
-```dotenv
-VSMP_VIDEO_PATH=/home/worgarside/movies/example.mp4
-```
+Set `VSMP_SOURCE=local` in the complete configuration above.
 
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,
-then set:
-
-```dotenv
-VSMP_SOURCE=immich
-IMMICH_URL=https://immich.example.com
-IMMICH_API_KEY=your-private-api-key
-IMMICH_ALBUM_ID=00000000-0000-0000-0000-000000000000
-```
+then set `VSMP_SOURCE=immich` in the complete configuration above.
 
 `IMMICH_URL` is the server URL with or without `/api`. Use the album's UUID,
 not its name. VSMP pages through the album with Immich's metadata search API,
@@ -54,6 +67,13 @@ structured album filter and cursor.
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
 brightness, or increase it for a darker image.
 
+Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
+missing, startup fails so the service does not report a working display that
+is only a software mock. For local development without a panel, set
+`VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop or playback
+failure, VSMP attempts to sleep the display and release its GPIO and SPI
+resources before exiting.
+
 ## YouTube playlist downloads
 
 Set `YT_PLAYLIST_ID` to a public playlist ID and run
@@ -71,13 +91,6 @@ runtime for yt-dlp's bundled `yt-dlp-ejs` challenge solver. Install
 yt-dlp by default). See the linked guide if using another supported runtime.
 Existing videos from the old downloader are not in the archive, so the first
 run may download those videos again.
-
-Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
-missing, startup fails so the service does not report a working display that
-is only a software mock. For local development without a panel, set
-`VSMP_ALLOW_MOCK_HARDWARE=true` explicitly.
-On service stop or playback failure, VSMP attempts to sleep the display and
-release its GPIO and SPI resources before exiting.
 
 ## Tooling
 

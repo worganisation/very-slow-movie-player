@@ -35,10 +35,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib import import_module
 from logging import getLogger
-from os import getenv
 from time import sleep
 from typing import ClassVar, Literal, Protocol, cast
 from unittest.mock import MagicMock
+
+from settings import SETTINGS
 
 LOGGER = getLogger(__name__)
 
@@ -117,7 +118,7 @@ class RaspberryPi:
             # SPI device, bus = 0, device = 0
             self.spi: SPIInterface = spi_device(0, 0)
         except ImportError as exc:
-            if getenv("VSMP_ALLOW_MOCK_HARDWARE", "false").casefold() != "true":
+            if not SETTINGS.vsmp_allow_mock_hardware:
                 message = "Display hardware is unavailable; install RPi.GPIO and spidev, "
                 message += "or set VSMP_ALLOW_MOCK_HARDWARE=true for local development"
                 raise RuntimeError(message) from exc
