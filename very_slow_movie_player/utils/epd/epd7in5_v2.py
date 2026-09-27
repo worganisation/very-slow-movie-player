@@ -32,7 +32,9 @@ from __future__ import annotations
 
 from logging import getLogger
 from time import monotonic, sleep
-from typing import TYPE_CHECKING, Final, Protocol, cast
+from typing import TYPE_CHECKING, Final
+
+from PIL.Image import Transpose
 
 from .epdconfig import RaspberryPi
 
@@ -40,14 +42,6 @@ LOGGER = getLogger(__name__)
 
 if TYPE_CHECKING:
     from PIL.Image import Image
-
-
-class PixelReader(Protocol):
-    """Read one monochrome pixel from a Pillow image."""
-
-    def __getitem__(self, _position: tuple[int, int]) -> int:
-        """Return a pixel value."""
-        ...
 
 
 class EPaperDisplay:
@@ -88,6 +82,15 @@ class EPaperDisplay:
         self.pi.digital_write(self.cs_pin, value=False)
         self.pi.spi_writebyte([data])
         self.pi.digital_write(self.cs_pin, value=True)
+
+    def send_data_block(self, data: bytes) -> None:
+        """Transfer a contiguous data payload with one GPIO and SPI call."""
+        self.pi.digital_write(self.dc_pin, value=True)
+        self.pi.digital_write(self.cs_pin, value=False)
+        try:
+            self.pi.spi_writebytes2(data)
+        finally:
+            self.pi.digital_write(self.cs_pin, value=True)
 
     def read_busy(self) -> None:
         """Read the busy signal."""
@@ -145,37 +148,26 @@ class EPaperDisplay:
         # EPD hardware init end
         return 0
 
-    def getbuffer(self, image: Image) -> list[int]:
-        """Get the image buffer."""
-        buf = [0xFF] * (int(self.WIDTH / 8) * self.HEIGHT)
-        image_monocolor = image.convert("1")
-        imwidth, imheight = image_monocolor.size
-        raw_pixels = image_monocolor.load()
-        if raw_pixels is None:
-            raise RuntimeError("Unable to read the monochrome image buffer")
-        pixels = cast("PixelReader", cast("object", raw_pixels))
-        if imwidth == self.WIDTH and imheight == self.HEIGHT:
-            LOGGER.debug("Vertical")
-            for y in range(imheight):
-                for x in range(imwidth):
-                    # Set the bits for the column of pixels at the current position.
-                    if pixels[x, y] == 0:
-                        buf[int((x + y * self.WIDTH) / 8)] &= ~(0x80 >> (x % 8))
-        elif imwidth == self.HEIGHT and imheight == self.WIDTH:
-            LOGGER.debug("Horizontal")
-            for y in range(imheight):
-                for x in range(imwidth):
-                    new_x = y
-                    new_y = self.HEIGHT - x - 1
-                    if pixels[x, y] == 0:
-                        buf[int((new_x + new_y * self.WIDTH) / 8)] &= ~(0x80 >> (y % 8))
-        return buf
+    def getbuffer(self, image: Image) -> bytes:
+        """Pack Pillow's monochrome pixels in the panel's existing orientation."""
+        if image.size not in {
+            (self.WIDTH, self.HEIGHT),
+            (self.HEIGHT, self.WIDTH),
+        }:
+            raise ValueError("Image must be 800x480 or 480x800 pixels")
+        with image.convert("1") as monochrome:
+            if image.size == (self.WIDTH, self.HEIGHT):
+                return monochrome.tobytes()
+            with monochrome.transpose(Transpose.ROTATE_90) as rotated:
+                return rotated.tobytes()
 
-    def display(self, image: list[int]) -> None:
+    def display(self, image: bytes) -> None:
         """Display the image."""
+        frame_bytes = self.WIDTH * self.HEIGHT // 8
+        if len(image) != frame_bytes:
+            raise ValueError(f"Display buffer must contain {frame_bytes} bytes")
         self.send_command(0x13)
-        for i in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(~image[i])
+        self.send_data_block(bytes(value ^ 0xFF for value in image))
 
         self.send_command(0x12)
         self.pi.delay_ms(100)
@@ -183,13 +175,12 @@ class EPaperDisplay:
 
     def clear(self) -> None:
         """Clear the display."""
+        blank = bytes(self.WIDTH * self.HEIGHT // 8)
         self.send_command(0x10)
-        for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(0x00)
+        self.send_data_block(blank)
 
         self.send_command(0x13)
-        for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(0x00)
+        self.send_data_block(blank)
 
         self.send_command(0x12)
         self.pi.delay_ms(100)

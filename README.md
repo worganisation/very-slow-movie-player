@@ -81,6 +81,9 @@ is only a software mock. For local development without a panel, set
 failure, VSMP attempts to sleep the display and release its GPIO and SPI
 resources before exiting.
 
+Frame packing and SPI block writes reduce Python and GPIO transfer overhead.
+The panel still uses its normal full refresh, including its visible flash.
+
 ### Home Assistant displayed image
 
 Configure `MQTT_HOST` to reach the broker used by Home Assistant. After the
