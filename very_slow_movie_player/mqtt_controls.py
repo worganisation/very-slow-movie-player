@@ -44,6 +44,7 @@ class HAClient:
         if SETTINGS.mqtt_tls:
             self.client.tls_set(cert_reqs=CERT_REQUIRED)  # pyright: ignore[reportUnknownMemberType]
         self._lock: Lock = Lock()
+        self._stopping: bool = False
         self._states: dict[str, str] = {}
         self._albums: dict[str, str] = {
             str(SETTINGS.immich_album_id): str(SETTINGS.immich_album_id)
@@ -61,10 +62,16 @@ class HAClient:
     def stop(self) -> None:
         """Mark controls unavailable on graceful shutdown."""
         acknowledged = False
-        if self.client.is_connected():
-            info = self.client.publish(
-                f"{self.root}/availability", "offline", qos=1, retain=True
+        with self._lock:
+            self._stopping = True
+            info = (
+                self.client.publish(
+                    f"{self.root}/availability", "offline", qos=1, retain=True
+                )
+                if self.client.is_connected()
+                else None
             )
+        if info is not None:
             try:
                 info.wait_for_publish(timeout=3)
                 acknowledged = info.is_published()
@@ -245,13 +252,18 @@ class HAClient:
         self._announce()
 
     def _announce(self) -> None:
+        with self._lock:
+            if self._stopping:
+                return
         self._discovery()
         with self._lock:
+            if self._stopping:
+                return
             for name, value in self._states.items():
                 self._publish(f"state/{name}", value, retain=True)
             if self._image is not None:
                 self._publish("displayed_frame", self._image, retain=True)
-        self._publish("availability", "online", retain=True)
+            self._publish("availability", "online", retain=True)
 
     def _on_message(
         self, _client: Client, _userdata: object, message: MQTTMessage
