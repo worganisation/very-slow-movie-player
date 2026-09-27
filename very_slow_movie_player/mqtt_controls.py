@@ -225,6 +225,8 @@ class HAClient:
             ("last_error", "Last error"),
         ):
             extra: dict[str, object] = {}
+            if name in {"video_current_frame", "video_frame_count"}:
+                extra["state_class"] = "measurement"
             if name in {"last_refresh", "next_refresh"}:
                 extra["device_class"] = "timestamp"
             self._entity(

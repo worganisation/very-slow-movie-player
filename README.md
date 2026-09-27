@@ -132,9 +132,10 @@ next frame; use **Redisplay current frame** to show it sooner. **Next** advances
 one video step or skips the displayed Immich asset, and **Restart current video**
 starts that video's frame position at zero. Both refresh interval controls have
 a three-minute minimum, which also applies to manual requests. Playback status,
-the displayed media filename, one-based current video frame, total video frame
-count, last successful refresh, next scheduled refresh, and last error are
-reported as sensors. The frame sensors are unknown while a photo is displayed.
+the displayed media filename without its extension, one-based current video
+frame, total video frame count, last successful refresh, next scheduled refresh,
+and last error are reported as sensors. The frame sensors are unknown while a
+photo is displayed.
 Configured source and current displayed media are separate while a source
 change is pending.
 
