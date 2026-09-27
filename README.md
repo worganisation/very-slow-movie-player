@@ -252,3 +252,10 @@ Configure a `production-deploy` GitHub environment with these values:
 Tailscale policy must allow `tag:ci` to reach the Pi's SSH port. Install the
 deploy public key in the Pi user's `authorized_keys`, and verify the Pi's SSH
 host key out of band before storing it in `VSMP_SSH_KNOWN_HOSTS`.
+
+## Offline library and captions
+
+[Import Jellyfin or YouTube media](docs/media-imports.md), then use the
+[Home Assistant library and caption controls](docs/library-controls.md).
+[Native 800×480 caption samples](docs/caption-samples/README.md) show the
+configurable monochrome layouts.

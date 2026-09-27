@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    vsmp_source: Literal["local", "immich"] = "local"
+    vsmp_source: Literal["local", "immich", "library"] = "local"
     vsmp_video_path: Path
     immich_url: AnyHttpUrl
     immich_api_key: SecretStr
