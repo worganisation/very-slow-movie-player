@@ -247,7 +247,8 @@ class HAClient:
     ) -> None:
         if reason_code.is_failure:
             return
-        _ = self.client.subscribe(f"{self.root}/command/+", qos=1)
+        # Commands are live actions: QoS 0 avoids broker redelivery on reconnect.
+        _ = self.client.subscribe(f"{self.root}/command/+", qos=0)
         _ = self.client.subscribe(f"{self.discovery}/status", qos=1)
         self._announce()
 
