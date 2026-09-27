@@ -73,7 +73,7 @@ class ImmichAlbum:
         """Use the album client as a context manager."""
         return self
 
-    def __exit__(self, *args: object) -> None:
+    def __exit__(self, *_args: object) -> None:
         """Close connections when playback stops."""
         self.client.close()
 
