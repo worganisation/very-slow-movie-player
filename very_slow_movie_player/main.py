@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from fractions import Fraction
+from itertools import chain
 from json import dumps, loads
 from math import ceil
 from os import getenv
@@ -10,6 +12,7 @@ from pathlib import Path
 from time import sleep
 from typing import TypedDict
 
+from immich import Asset, ImmichAlbum
 from PIL import Image
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
@@ -337,29 +340,55 @@ def choose_next_video() -> Path | None:
     return None
 
 
+def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
+    """Display one album asset using the existing image and video paths."""
+    media = album.download(asset)
+    if asset.kind == "VIDEO":
+        play_video(media)
+    else:
+        display_image(media, 300)
+
+
 @process_exception(logger=LOGGER)
 def main() -> None:
-    """Play the local video selected in ``VSMP_VIDEO_PATH``."""
-    video_path = getenv("VSMP_VIDEO_PATH")
-    if not video_path:
-        raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+    """Play a configured local video, or assets from an Immich album."""
+    source = getenv("VSMP_SOURCE", "local").casefold()
+    if source not in {"local", "immich"}:
+        raise ValueError("VSMP_SOURCE must be 'local' or 'immich'")
 
-    video = Path(video_path).expanduser()
-    if not video.is_file():
-        raise FileNotFoundError(video)
+    with ExitStack() as stack:
+        album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
+        if album is None:
+            video_path = getenv("VSMP_VIDEO_PATH")
+            if not video_path:
+                raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+            video = Path(video_path).expanduser()
+            if not video.is_file():
+                raise FileNotFoundError(video)
+        else:
+            assets = iter(album.assets())
+            first_asset = next(assets, None)
+            if first_asset is None:
+                LOGGER.warning("The configured Immich album contains no assets")
+                sleep(300)
+                return
 
-    const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    if not const.PROGRESS_LOG.is_file():
-        LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
-        const.PROGRESS_LOG.write_text("{}")
+        const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if not const.PROGRESS_LOG.is_file():
+            LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
+            const.PROGRESS_LOG.write_text("{}")
 
-    DISPLAY.init()
-    try:
-        DISPLAY.clear()
-        play_video(video)
-    finally:
-        DISPLAY.sleep()
-        DISPLAY.pi.module_exit()
+        DISPLAY.init()
+        try:
+            DISPLAY.clear()
+            if album is None:
+                play_video(video)
+            else:
+                for asset in chain((first_asset,), assets):
+                    play_immich_asset(album, asset)
+        finally:
+            DISPLAY.sleep()
+            DISPLAY.pi.module_exit()
 
 
 if __name__ == "__main__":
