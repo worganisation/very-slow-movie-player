@@ -2,36 +2,40 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from fractions import Fraction
-from json import dumps
-from math import ceil
+from itertools import chain
+from math import ceil, isfinite
 from math import pow as float_pow
 from os import getenv
 from pathlib import Path
+from signal import SIG_IGN, SIGTERM, signal
+from sys import exception as active_exception
+from tempfile import NamedTemporaryFile
 from time import sleep
-from typing import NotRequired, TypedDict
+from typing import TYPE_CHECKING, NoReturn
 
-from PIL import Image
+from immich import Asset, ImmichAlbum
+from PIL import Image, ImageOps
 from PIL.Image import Dither, Resampling
-from pydantic import TypeAdapter
 from utils import EPaperDisplay, const
+from utils.progress import get_progress, load_progress, set_progress
 from wg_utilities.decorators import process_exception
 from wg_utilities.loggers import get_streaming_logger
 
 from ffmpeg import input as ffmpeg_input
 from ffmpeg import probe
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from types import FrameType
+
+    from ffmpeg import ProbeInfo, ProbeStream
+
 LOGGER = get_streaming_logger(__name__)
 
 
 DISPLAY = EPaperDisplay()
-
-
-class ProgressInfo(TypedDict):
-    """Model for the progress info objects in the log."""
-
-    current: int
-    total: NotRequired[int]
 
 
 @process_exception(logger=LOGGER)
@@ -40,6 +44,7 @@ def extract_frame(
     frame: int,
     *,
     fps: float,
+    stream_index: int,
     extract_output_path: Path = const.EXTRACT_PATH,
 ) -> Path:
     """Output a frame from the video file to a JPG image.
@@ -65,6 +70,7 @@ def extract_frame(
         video_path (Path): the name of the file to extract the frame from
         frame (int): the number of the frame to extract
         fps (float): the video's frames per second
+        stream_index (int): the selected ffprobe stream's absolute index
         extract_output_path (Path): the path at which to place the extracted image file
 
     Returns:
@@ -72,12 +78,40 @@ def extract_frame(
     """
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
-    _ = (
-        ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
-        .output(str(extract_output_path), vframes=1)
-        .overwrite_output()
-        .run(capture_stdout=True, capture_stderr=True)
-    )
+    if (
+        video_path.exists()
+        and extract_output_path.exists()
+        and extract_output_path.samefile(video_path)
+    ):
+        raise ValueError("Frame output path must differ from the input video")
+
+    extract_output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Remove the previous frame before seeking: ffmpeg can exit successfully at EOF
+    # without writing a new file.
+    extract_output_path.unlink(missing_ok=True)
+    with NamedTemporaryFile(
+        dir=extract_output_path.parent,
+        prefix=f".{extract_output_path.stem}.",
+        suffix=".jpg",
+        delete=False,
+    ) as output:
+        temporary = Path(output.name)
+    try:
+        _ = (
+            ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
+            .output(str(temporary), vframes=1, map=f"0:{stream_index}")
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+        if temporary.stat().st_size == 0:
+            raise RuntimeError(f"ffmpeg produced no frame at position {frame}")
+        with Image.open(temporary) as candidate:
+            if candidate.format != "JPEG":
+                raise ValueError("ffmpeg produced a non-JPEG frame")
+            candidate.verify()
+        _ = temporary.replace(extract_output_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
     return extract_output_path
 
@@ -100,81 +134,29 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
         frame_output_path,
     )
 
-    pil_im = Image.open(image_path)
-
-    scale_factor = min(DISPLAY.WIDTH / pil_im.size[0], DISPLAY.HEIGHT / pil_im.size[1])
-
-    resize_width = round(pil_im.size[0] * scale_factor)
-    resize_height = round(pil_im.size[1] * scale_factor)
-
-    letterboxed = Image.new("RGB", (DISPLAY.WIDTH, DISPLAY.HEIGHT))
-    offset = (
-        round((DISPLAY.WIDTH - resize_width) / 2),
-        round((DISPLAY.HEIGHT - resize_height) / 2),
-    )
-
-    letterboxed.paste(
-        pil_im.resize((resize_width, resize_height), Resampling.LANCZOS),  # pyright: ignore[reportUnknownMemberType]
-        offset,
-    )
-
-    letterboxed.save(frame_output_path)
+    with Image.open(image_path) as source:
+        oriented = ImageOps.exif_transpose(source)
+        with oriented:
+            scale_factor = min(
+                DISPLAY.WIDTH / oriented.width,
+                DISPLAY.HEIGHT / oriented.height,
+            )
+            resize_width = max(1, round(oriented.width * scale_factor))
+            resize_height = max(1, round(oriented.height * scale_factor))
+            offset = (
+                round((DISPLAY.WIDTH - resize_width) / 2),
+                round((DISPLAY.HEIGHT - resize_height) / 2),
+            )
+            with (
+                Image.new("RGB", (DISPLAY.WIDTH, DISPLAY.HEIGHT)) as letterboxed,
+                oriented.resize(  # pyright: ignore[reportUnknownMemberType]
+                    (resize_width, resize_height), Resampling.LANCZOS
+                ) as resized,
+            ):
+                letterboxed.paste(resized, offset)
+                letterboxed.save(frame_output_path)
 
     return frame_output_path
-
-
-@process_exception(logger=LOGGER)
-def get_progress(video_path: Path, default: int = 0) -> int:
-    """Get the number of the most recently played frame from the JSON log file.
-
-    This is so we can resume in the case of an early exit.
-
-    Args:
-        video_path (Path): the path to the file being played
-        default (int): a default value to return if the file isn't logged
-
-    Returns:
-        int: the number of the frame that was played most recently
-    """
-    log_data = TypeAdapter(dict[str, ProgressInfo]).validate_json(
-        const.PROGRESS_LOG.read_text(),
-    )
-
-    LOGGER.info("Getting progress for `%s`", video_path)
-
-    try:
-        return log_data[video_path.as_posix()]["current"]
-    except KeyError:
-        return default
-
-
-@process_exception(logger=LOGGER)
-def set_progress(
-    video_path: Path,
-    current_frame: int,
-    frame_count: int | None = None,
-) -> None:
-    """Update the JSON log file, so we can resume if the program is exited.
-
-    Args:
-        video_path (Path): the path to the file being played
-        current_frame (int): which frame has been played most recently
-        frame_count (int): the total number of frames in the video
-    """
-    log_data = TypeAdapter(dict[str, ProgressInfo]).validate_json(
-        const.PROGRESS_LOG.read_text(),
-    )
-
-    progress: ProgressInfo = {"current": current_frame}
-
-    LOGGER.debug("Updating log for `%s` to frame #%i", video_path, current_frame)
-
-    if frame_count:
-        progress["total"] = frame_count
-
-    log_data[video_path.as_posix()] = progress
-
-    _ = const.PROGRESS_LOG.write_text(dumps(log_data, indent=2, sort_keys=True))
 
 
 @process_exception(logger=LOGGER)
@@ -197,57 +179,80 @@ def display_image(
     gamma = float(getenv("VSMP_IMAGE_GAMMA", "1.7"))
     if gamma <= 0:
         raise ValueError("VSMP_IMAGE_GAMMA must be positive")
-    grayscale = Image.open(output_path).convert("L")
-    darkened = grayscale.point(  # pyright: ignore[reportUnknownMemberType]
-        [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
-    )
-    pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)
+    with (
+        Image.open(output_path) as formatted,
+        formatted.convert("L") as grayscale,
+        grayscale.point(  # pyright: ignore[reportUnknownMemberType]
+            [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
+        ) as darkened,
+        darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
+    ):
+        buffer = DISPLAY.getbuffer(monochrome)
 
-    # display the image
-    DISPLAY.display(DISPLAY.getbuffer(pil_im))
+    DISPLAY.display(buffer)
 
     sleep(display_time)
 
 
-def video_metadata(video_path: Path) -> tuple[int, float]:
-    """Get the video frame count and frames per second from ffprobe."""
+def usable_frame_rate(stream: ProbeStream) -> float:
+    """Read a positive finite frame rate from ffprobe stream metadata."""
+    for rate in (stream.get("avg_frame_rate"), stream.get("r_frame_rate")):
+        if rate is None:
+            continue
+        try:
+            fps = float(Fraction(rate))
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError):
+            continue
+        if isfinite(fps) and fps > 0:
+            return fps
+    raise RuntimeError("No usable video frame rate found in ffmpeg probe")
+
+
+def usable_frame_count(stream: ProbeStream, info: ProbeInfo, fps: float) -> int:
+    """Read or estimate a positive finite frame count."""
+    raw_frame_count = stream.get("nb_frames")
+    if raw_frame_count is not None and str(raw_frame_count).isdigit():
+        frame_count = int(raw_frame_count)
+        if frame_count == 0:
+            raise RuntimeError("Video stream has zero frames")
+        return frame_count
+
+    duration = stream.get("duration") or info.get("format", {}).get("duration")
+    if duration is None:
+        raise RuntimeError("No video duration found in ffmpeg probe")
+    try:
+        seconds = float(duration)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise RuntimeError("No usable video duration found in ffmpeg probe") from exc
+    estimated_frames = seconds * fps
+    if not isfinite(seconds) or seconds <= 0 or not isfinite(estimated_frames):
+        raise RuntimeError("No usable video duration found in ffmpeg probe")
+    frame_count = ceil(estimated_frames)
+    if frame_count <= 0:
+        raise RuntimeError("Video stream has zero frames")
+    return frame_count
+
+
+def video_metadata(video_path: Path) -> tuple[int, float, int]:
+    """Get a playable video stream's frame count, rate, and absolute index."""
     probe_data = probe(video_path)
     video_stream = next(
         (
             stream
             for stream in probe_data.get("streams", [])
             if stream.get("codec_type") == "video"
+            and stream.get("disposition", {}).get("attached_pic") != 1
         ),
         None,
     )
     if video_stream is None:
-        raise RuntimeError("No video stream found in ffmpeg probe")
+        raise RuntimeError("No playable video stream found in ffmpeg probe")
+    stream_index = video_stream.get("index")
+    if stream_index is None or stream_index < 0:
+        raise RuntimeError("No usable video stream index found in ffmpeg probe")
 
-    fps = 0.0
-    for rate in (video_stream.get("avg_frame_rate"), video_stream.get("r_frame_rate")):
-        if rate is None:
-            continue
-        try:
-            fps = float(Fraction(rate))
-        except (TypeError, ValueError, ZeroDivisionError):
-            continue
-        if fps > 0:
-            break
-    if fps <= 0:
-        raise RuntimeError("No usable video frame rate found in ffmpeg probe")
-
-    raw_frame_count = video_stream.get("nb_frames")
-    if raw_frame_count and str(raw_frame_count).isdigit():
-        frame_count = int(raw_frame_count)
-    else:
-        duration = video_stream.get("duration") or probe_data.get("format", {}).get(
-            "duration",
-        )
-        if duration is None:
-            raise RuntimeError("No video duration found in ffmpeg probe")
-        frame_count = ceil(float(duration) * fps)
-
-    return frame_count, fps
+    fps = usable_frame_rate(video_stream)
+    return usable_frame_count(video_stream, probe_data, fps), fps, stream_index
 
 
 @process_exception(logger=LOGGER)
@@ -265,7 +270,7 @@ def play_video(video_path: Path) -> None:
     if not video_path.is_file():
         raise FileNotFoundError(video_path)
 
-    frame_count, fps = video_metadata(video_path)
+    frame_count, fps, stream_index = video_metadata(video_path)
     LOGGER.info("There are %d frames in this video", frame_count)
 
     if getenv("ALWAYS_RESTART_VIDEOS", "false").lower() == "true":
@@ -294,82 +299,103 @@ def play_video(video_path: Path) -> None:
 
         # Use ffmpeg to extract a frame from the movie, crop it,
         # letterbox it and output it as a JPG
-        output_path = extract_frame(video_path, frame, fps=fps)
+        output_path = extract_frame(video_path, frame, fps=fps, stream_index=stream_index)
 
         display_image(output_path)
 
     set_progress(video_path, frame_count, frame_count)
 
 
-@process_exception(logger=LOGGER)
-def choose_next_video() -> Path | None:
-    """Pick which video to play next.
-
-    Either find one that hasn't yet been finished, or one that hasn't even been started.
-
-    Returns:
-        str: the name of the video file to start playing
-    """
-    log_data = TypeAdapter(dict[str, ProgressInfo]).validate_json(
-        const.PROGRESS_LOG.read_text(),
-    )
-
-    LOGGER.info("There are %i videos in the log", len(log_data))
-
-    for log_file_path, video in log_data.items():
-        if not Path(log_file_path).is_file():
-            LOGGER.debug("`%s` no longer available", log_file_path)
-            continue
-
-        if (total := video.get("total", -1)) - (
-            current_frame := video.get("current", -1)
-        ) > const.INCREMENT:
-            LOGGER.info(
-                "`%s` has only had %i/%i frames played",
-                log_file_path,
-                current_frame,
-                total,
-            )
-            return Path(log_file_path)
-
-    for file in const.MEDIA_DIR.iterdir():
-        if file.suffix != ".mp4":
-            LOGGER.debug("`%s` is not an mp4", file)
-            continue
-
-        if file.resolve().as_posix() in log_data:
-            LOGGER.debug("`%s` has already been played", file)
-            continue
-
-        LOGGER.info("`%s` hasn't been played yet, returning", file)
-        return file
-
-    return None
+def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
+    """Display one album asset using the existing image and video paths."""
+    media = album.download(asset)
+    if asset.kind == "VIDEO":
+        play_video(media)
+    else:
+        display_image(media, 300)
 
 
-@process_exception(logger=LOGGER)
-def main() -> None:
-    """Play the local video selected in ``VSMP_VIDEO_PATH``."""
-    video_path = getenv("VSMP_VIDEO_PATH")
-    if not video_path:
-        raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> NoReturn:
+    """Let Python unwind display cleanup when systemd stops the service."""
+    _ = signal(SIGTERM, SIG_IGN)
+    raise SystemExit(0)
 
-    video = Path(video_path).expanduser()
-    if not video.is_file():
-        raise FileNotFoundError(video)
 
-    const.PROGRESS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    if not const.PROGRESS_LOG.is_file():
-        LOGGER.warning("Progress log not found at `%s`", const.PROGRESS_LOG)
-        _ = const.PROGRESS_LOG.write_text("{}")
-
-    _ = DISPLAY.init()
+def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None) -> None:
+    """Release GPIO and SPI without hiding the original playback failure."""
+    cleanup_error: BaseException | None = None
+    if enter_sleep:
+        try:
+            DISPLAY.sleep()
+        except BaseException as exc:  # noqa: BLE001 - preserve cleanup on SIGTERM
+            cleanup_error = exc
     try:
-        DISPLAY.clear()
-        play_video(video)
-    finally:
-        DISPLAY.sleep()
         DISPLAY.pi.module_exit()
+    except BaseException as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+        else:
+            LOGGER.exception("Additional failure releasing display hardware")
+    if cleanup_error is not None:
+        if previous_error is not None:
+            LOGGER.error("Display cleanup also failed: %s", cleanup_error)
+        else:
+            raise cleanup_error
+
+
+@process_exception(logger=LOGGER)
+def main() -> None:  # noqa: PLR0912 - source preparation and hardware lifecycle
+    """Play a configured local video, or assets from an Immich album."""
+    source = getenv("VSMP_SOURCE", "local").casefold()
+    if source not in {"local", "immich"}:
+        raise ValueError("VSMP_SOURCE must be 'local' or 'immich'")
+
+    with ExitStack() as stack:
+        video: Path | None = None
+        assets: Iterator[Asset] | None = None
+        first_asset: Asset | None = None
+        album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
+        if album is None:
+            video_path = getenv("VSMP_VIDEO_PATH")
+            if not video_path:
+                raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+            video = Path(video_path).expanduser()
+            if not video.is_file():
+                raise FileNotFoundError(video)
+        else:
+            assets = iter(album.assets())
+            first_asset = next(assets, None)
+            if first_asset is None:
+                LOGGER.warning("The configured Immich album contains no assets")
+                sleep(300)
+                return
+
+        _ = load_progress()
+
+        previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
+        display_initialized = False
+        try:
+            _ = DISPLAY.init()
+            display_initialized = True
+            DISPLAY.clear()
+            if video is not None:
+                play_video(video)
+            elif album is not None and first_asset is not None and assets is not None:
+                for asset in chain((first_asset,), assets):
+                    play_immich_asset(album, asset)
+            else:
+                raise RuntimeError("No playback source was prepared")
+        finally:
+            previous_error = active_exception()
+            _ = signal(SIGTERM, SIG_IGN)
+            try:
+                if DISPLAY.pi.module_initialized:
+                    clean_up_display(
+                        enter_sleep=display_initialized,
+                        previous_error=previous_error,
+                    )
+            finally:
+                _ = signal(SIGTERM, previous_sigterm_handler)
 
 
 if __name__ == "__main__":

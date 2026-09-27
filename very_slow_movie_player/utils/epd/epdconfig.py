@@ -35,11 +35,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib import import_module
 from logging import getLogger
+from os import getenv
 from time import sleep
 from typing import ClassVar, Literal, Protocol, cast
 from unittest.mock import MagicMock
-
-from utils.const import HOSTNAME
 
 LOGGER = getLogger(__name__)
 
@@ -104,6 +103,7 @@ class RaspberryPi:
     BUSY_PIN: ClassVar[int] = 24
 
     def __init__(self) -> None:
+        self.module_initialized: bool = False
         try:
             self.gpio: GPIOInterface = cast(
                 "GPIOInterface",
@@ -116,9 +116,11 @@ class RaspberryPi:
 
             # SPI device, bus = 0, device = 0
             self.spi: SPIInterface = spi_device(0, 0)
-        except ImportError:
-            if HOSTNAME == "mtrxpi":
-                raise
+        except ImportError as exc:
+            if getenv("VSMP_ALLOW_MOCK_HARDWARE", "false").casefold() != "true":
+                message = "Display hardware is unavailable; install RPi.GPIO and spidev, "
+                message += "or set VSMP_ALLOW_MOCK_HARDWARE=true for local development"
+                raise RuntimeError(message) from exc
 
             self.gpio = MagicMock()
             self.spi = MagicMock()
@@ -142,23 +144,48 @@ class RaspberryPi:
 
     def module_init(self) -> Literal[0]:
         """Module initialization."""
-        self.gpio.setmode(self.gpio.BCM)
-        self.gpio.setwarnings(False)  # noqa: FBT003
-        self.gpio.setup(self.RST_PIN, self.gpio.OUT)
-        self.gpio.setup(self.DC_PIN, self.gpio.OUT)
-        self.gpio.setup(self.CS_PIN, self.gpio.OUT)
-        self.gpio.setup(self.BUSY_PIN, self.gpio.IN)
-        self.spi.max_speed_hz = 4000000
-        self.spi.mode = 0b00
+        self.module_initialized = False
+        try:
+            self.gpio.setmode(self.gpio.BCM)
+            self.gpio.setwarnings(False)  # noqa: FBT003
+            self.gpio.setup(self.RST_PIN, self.gpio.OUT)
+            self.gpio.setup(self.DC_PIN, self.gpio.OUT)
+            self.gpio.setup(self.CS_PIN, self.gpio.OUT)
+            self.gpio.setup(self.BUSY_PIN, self.gpio.IN)
+            self.spi.max_speed_hz = 4000000
+            self.spi.mode = 0b00
+        except BaseException:
+            # GPIO may have configured only some pins. Avoid module_exit's pin writes.
+            try:
+                self.spi.close()
+            except BaseException:
+                LOGGER.exception("Failed to close SPI after display setup failed")
+            try:
+                self.gpio.cleanup()
+            except BaseException:
+                LOGGER.exception("Failed to release GPIO after display setup failed")
+            raise
+        self.module_initialized = True
         return 0
 
     def module_exit(self) -> None:
         """Module exit."""
-        LOGGER.debug("spi end")
-        self.spi.close()
-
-        LOGGER.debug("close 5V, Module enters 0 power consumption ...")
-        self.gpio.output(self.RST_PIN, 0)
-        self.gpio.output(self.DC_PIN, 0)
-
-        self.gpio.cleanup()
+        if not self.module_initialized:
+            return
+        first_error: BaseException | None = None
+        for cleanup in (
+            self.spi.close,
+            lambda: self.gpio.output(self.RST_PIN, 0),
+            lambda: self.gpio.output(self.DC_PIN, 0),
+            self.gpio.cleanup,
+        ):
+            try:
+                cleanup()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    LOGGER.exception("Additional display hardware cleanup failure")
+        self.module_initialized = False
+        if first_error is not None:
+            raise first_error

@@ -2,7 +2,9 @@ from pathlib import Path
 from typing import TypedDict
 
 class ProbeStream(TypedDict, total=False):
+    index: int
     codec_type: str
+    disposition: dict[str, int]
     avg_frame_rate: str
     r_frame_rate: str
     nb_frames: str
@@ -13,7 +15,7 @@ class ProbeInfo(TypedDict, total=False):
     format: dict[str, str]
 
 class Stream:
-    def output(self, filename: str, *, vframes: int) -> Stream: ...
+    def output(self, filename: str, *, vframes: int, map: str) -> Stream: ...  # noqa: A002
     def overwrite_output(self) -> Stream: ...
     def run(
         self,
