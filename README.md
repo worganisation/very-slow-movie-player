@@ -81,6 +81,11 @@ If the display's busy signal stays active for more than 30 seconds, playback
 raises an error so systemd can restart the service. Inspect the service journal
 and the display wiring if the error recurs.
 
+The old Pipenv dependency updater and its cron installer have been removed.
+If they were installed on a Pi, check the `worgarside` user's `crontab -l` and
+remove the entry for `utilities/dep_updater/dep_updater.sh` with `crontab -e`.
+The release deployment workflow installs locked dependencies with uv.
+
 ## Release deployment
 
 The **Semantic Release** workflow is started manually on `main`. When it
