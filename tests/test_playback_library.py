@@ -119,6 +119,7 @@ class PlaybackLibraryTests(unittest.TestCase):
             self.assertEqual(preview.mode, "1")
             self.assertEqual(preview.tobytes(), panel_images[0].tobytes())
         display.display.assert_called_once_with(b"buffer")
+        mqtt.state.assert_any_call("current_caption", "A caption for this frame.")
 
     def test_oversize_caption_keeps_playback_and_reports_error(self) -> None:
         """A layout failure shows the image and remains visible as caption status."""
@@ -137,12 +138,49 @@ class PlaybackLibraryTests(unittest.TestCase):
             )
         display.display.assert_called_once_with(b"frame")
         mqtt.image.assert_called_once()
+        mqtt.state.assert_any_call("current_caption", "")
         self.assertTrue(
             any(
                 call.args[0] == "caption_error" and call.args[1] != "none"
                 for call in mqtt.state.call_args_list
             )
         )
+
+    def test_caption_sensor_clears_on_silence_and_preserves_failed_panel(self) -> None:
+        """Publish verbatim text only after display success; clear it on silence."""
+        path = self.root / "frame.png"
+        Image.new("L", (800, 480), 128).save(path)
+        display = SimpleNamespace(getbuffer=Mock(return_value=b"frame"), display=Mock())
+        mqtt = Mock()
+        caption = 'Hello, world!\n"Yes?"'
+        with (
+            patch.object(self.main, "DISPLAY", display),
+            patch.object(self.main, "format_image", return_value=path),
+        ):
+            self.main.display_image(
+                path, 1.7, mqtt, caption=caption, controls=self.defaults
+            )
+            mqtt.state.assert_any_call("current_caption", caption)
+            mqtt.reset_mock()
+            self.main.display_image(path, 1.7, mqtt, controls=self.defaults)
+            mqtt.state.assert_any_call("current_caption", "")
+            mqtt.reset_mock()
+            display.display.side_effect = RuntimeError("panel failed")
+            with self.assertRaises(self.main.PanelRefreshError):
+                self.main.display_image(path, 1.7, mqtt, controls=self.defaults)
+            mqtt.state.assert_not_called()
+
+    def test_timestamp_reports_displayed_frame_and_clears_for_photo(self) -> None:
+        """Use media-relative frame time, including hours, and no photo timestamp."""
+        runtime = object.__new__(self.main.PlaybackRuntime)
+        runtime.mqtt = Mock()
+        runtime.controls = self.defaults
+        path = self.root / "frame.png"
+        runtime.mark_displayed(path, "movie", video_frame=(path, 7323, 2.0, 0, 5.0))
+        runtime.mqtt.state.assert_any_call("video_timestamp", "01:01:01")
+        runtime.mqtt.reset_mock()
+        runtime.mark_displayed(path, "photo", kind="photo")
+        runtime.mqtt.state.assert_any_call("video_timestamp", "")
 
     def test_background_import_is_bounded_and_failure_visible(self) -> None:
         """A running request cannot accumulate a queue or block playback polling."""
