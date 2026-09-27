@@ -13,7 +13,6 @@ dependencies = [
   "ffmpeg-python>=0.2.0,<0.3",
   "wg-utilities[loggers]>=5.17.4,<6",
   "pydantic>=2.13.5,<3",
-  "httpx>=0.28.1,<0.29",
   "yt-dlp[default]>=2026.8.19,<2027",
 ]
 
