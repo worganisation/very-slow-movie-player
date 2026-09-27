@@ -1,0 +1,13 @@
+from collections.abc import Mapping
+from typing import Self
+
+class YoutubeDL:
+    def __init__(self, params: Mapping[str, object]) -> None: ...
+    def __enter__(self) -> Self: ...
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None: ...
+    def download(self, urls: list[str]) -> int | None: ...

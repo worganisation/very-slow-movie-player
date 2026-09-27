@@ -20,68 +20,23 @@ dependencies = [
 [tool.uv]
 package = false
 
+[dependency-groups]
+dev = ["basedpyright>=1.40.1"]
+
 [tool.codespell]
 skip = '*.json,*.csv,*.xml,*.lock'
 
-[tool.mypy]
-plugins = ["pydantic.mypy"]
-exclude = ["_local_sandbox"]
-follow_imports = "normal"
-mypy_path = "very_slow_movie_player"
-
-check_untyped_defs = true
-
-disallow_any_generics = true
-disallow_incomplete_defs = true
-disallow_subclassing_any = true
-disallow_untyped_calls = true
-disallow_untyped_decorators = true
-disallow_untyped_defs = true
-
-explicit_package_bases = true
-
-ignore_missing_imports = false
-
-no_implicit_optional = true
-no_implicit_reexport = true
-
-show_column_numbers = true
-show_error_codes = true
-show_error_context = true
-
-strict = true
-strict_equality = true
-strict_optional = true
-
-warn_return_any = true
-warn_unused_ignores = true
-warn_unused_configs = true
-warn_redundant_casts = true
-warn_no_return = true
-warn_unreachable = true
-
-enable_error_code = [
-  "arg-type",           # Checks for argument types in function calls.
-  "assignment",         # Validates types of variable assignments.
-  "return-value",       # Ensures that return values match the declared type.
-  "call-overload",      # Validates correct use of method/function overloads.
-  "operator",           # Checks operator usage against expected types.
-  "index",              # Validates types used in indexing operations.
-  "attr-defined",       # Checks if attributes exist in classes/objects.
-  "no-untyped-call",    # Prevents calls to untyped functions in typed contexts.
-  "unreachable",        # Warns about code that can never be executed.
-  "truthy-bool",        # Ensures that boolean expressions are boolean in type.
-  "union-attr",         # Checks for attribute access in unions safely.
-  "dict-item",          # Checks for proper types used in dictionary items.
-  "unused-awaitable",   # Warns if an awaitable is not awaited.
-  "override",           # Ensures overridden methods match the signature in base class.
-  "list-item",          # Checks type consistency of list items.
-  "return",             # Ensures all code paths in a function return a value if needed.
-  "type-var",           # Ensures type variables are used correctly.
-  "valid-type",         # Validates types used in annotations are recognized.
-  "func-returns-value", # Ensures functions declared with a return type actually return a value.
+[tool.basedpyright]
+typeCheckingMode = "all"
+include = ["very_slow_movie_player"]
+stubPath = "typings"
+executionEnvironments = [
+  { root = "very_slow_movie_player", extraPaths = ["very_slow_movie_player"] },
 ]
-
+reportMissingImports = "error"
+reportMissingTypeStubs = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+pythonVersion = "3.12"
 
 [tool.ruff]
 fix = true
@@ -89,6 +44,7 @@ preview = true
 line-length = 90
 lint.select = ["ALL"]
 lint.ignore = [
+  "COM812", # handled by the formatter
   "ANN401", # https://docs.astral.sh/ruff/rules/any-type/
   "D107",   # https://docs.astral.sh/ruff/rules/undocumented-public-init/
   "D202",   # https://docs.astral.sh/ruff/rules/no-blank-line-after-function/
@@ -99,7 +55,6 @@ lint.ignore = [
   "TD003",  # https://docs.astral.sh/ruff/rules/missing-todo-link/
   "EM",     # https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
   "FIX002", # https://docs.astral.sh/ruff/rules/line-contains-todo/
-  "ANN101", # https://docs.astral.sh/ruff/rules/missing-type-self/
   "CPY",    # https://docs.astral.sh/ruff/rules/#flake8-copyright-cpy
   "DOC201", # https://docs.astral.sh/ruff/rules/docstring-missing-returns/
   "DOC402", # https://docs.astral.sh/ruff/rules/docstring-missing-yields/
