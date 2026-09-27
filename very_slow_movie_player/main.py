@@ -11,6 +11,7 @@ from os import getenv
 from pathlib import Path
 from signal import SIG_IGN, SIGTERM, signal
 from sys import exception as active_exception
+from tempfile import NamedTemporaryFile
 from time import sleep
 from typing import TYPE_CHECKING, NoReturn
 
@@ -73,12 +74,33 @@ def extract_frame(
     """
     LOGGER.info("Extracting frame #%i from `%s`", frame, video_path)
 
-    _ = (
-        ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
-        .output(str(extract_output_path), vframes=1)
-        .overwrite_output()
-        .run(capture_stdout=True, capture_stderr=True)
-    )
+    extract_output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Remove the previous frame before seeking: ffmpeg can exit successfully at EOF
+    # without writing a new file.
+    extract_output_path.unlink(missing_ok=True)
+    with NamedTemporaryFile(
+        dir=extract_output_path.parent,
+        prefix=f".{extract_output_path.stem}.",
+        suffix=".jpg",
+        delete=False,
+    ) as output:
+        temporary = Path(output.name)
+    try:
+        _ = (
+            ffmpeg_input(video_path, ss=f"{frame / fps:.6f}")
+            .output(str(temporary), vframes=1)
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+        if temporary.stat().st_size == 0:
+            raise RuntimeError(f"ffmpeg produced no frame at position {frame}")
+        with Image.open(temporary) as candidate:
+            if candidate.format != "JPEG":
+                raise ValueError("ffmpeg produced a non-JPEG frame")
+            candidate.verify()
+        _ = temporary.replace(extract_output_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
     return extract_output_path
 
