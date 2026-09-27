@@ -114,7 +114,7 @@ def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -
     )
 
     letterboxed.paste(
-        pil_im.resize((resize_width, resize_height), Resampling.LANCZOS),
+        pil_im.resize((resize_width, resize_height), Resampling.LANCZOS),  # pyright: ignore[reportUnknownMemberType]
         offset,
     )
 
@@ -198,7 +198,7 @@ def display_image(
     if gamma <= 0:
         raise ValueError("VSMP_IMAGE_GAMMA must be positive")
     grayscale = Image.open(output_path).convert("L")
-    darkened = grayscale.point(
+    darkened = grayscale.point(  # pyright: ignore[reportUnknownMemberType]
         [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
     )
     pil_im = darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG)

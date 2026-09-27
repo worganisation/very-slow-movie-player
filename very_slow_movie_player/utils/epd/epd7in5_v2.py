@@ -142,7 +142,10 @@ class EPaperDisplay:
         buf = [0xFF] * (int(self.WIDTH / 8) * self.HEIGHT)
         image_monocolor = image.convert("1")
         imwidth, imheight = image_monocolor.size
-        pixels = cast("PixelReader", image_monocolor.load())  # pyright: ignore[reportUnknownMemberType]
+        raw_pixels = image_monocolor.load()
+        if raw_pixels is None:
+            raise RuntimeError("Unable to read the monochrome image buffer")
+        pixels = cast("PixelReader", cast("object", raw_pixels))
         if imwidth == self.WIDTH and imheight == self.HEIGHT:
             LOGGER.debug("Vertical")
             for y in range(imheight):
