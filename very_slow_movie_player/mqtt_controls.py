@@ -74,13 +74,13 @@ class HAClient:
         """Cache confirmed state for reconnect and Home Assistant birth."""
         with self._lock:
             self._states[name] = value
-        self._publish(f"state/{name}", value, retain=True)
+            self._publish(f"state/{name}", value, retain=True)
 
     def image(self, png: bytes) -> None:
         """Retain the image only after a successful panel operation."""
         with self._lock:
             self._image = png
-        self._publish("displayed_frame", png, retain=True)
+            self._publish("displayed_frame", png, retain=True)
 
     def albums(self, labels: Mapping[str, str]) -> None:
         """Replace friendly names while keeping immutable album IDs internally."""
@@ -235,12 +235,10 @@ class HAClient:
     def _announce(self) -> None:
         self._discovery()
         with self._lock:
-            states = self._states.copy()
-            image = self._image
-        for name, value in states.items():
-            self._publish(f"state/{name}", value, retain=True)
-        if image is not None:
-            self._publish("displayed_frame", image, retain=True)
+            for name, value in self._states.items():
+                self._publish(f"state/{name}", value, retain=True)
+            if self._image is not None:
+                self._publish("displayed_frame", self._image, retain=True)
         self._publish("availability", "online", retain=True)
 
     def _on_message(
