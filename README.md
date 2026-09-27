@@ -35,6 +35,11 @@ installs only locked runtime dependencies; `just install-service` installs the
 existing unit, and `just install-all` does both. These recipes do not start the
 service. `just --list` shows the remaining service commands.
 
+The old Pipenv dependency updater and its cron installer have been removed.
+If they were installed on a Pi, check the `worgarside` user's `crontab -l` and
+remove the entry for `utilities/dep_updater/dep_updater.sh` with `crontab -e`.
+The release deployment workflow installs locked dependencies with uv.
+
 ## Release deployment
 
 The **Semantic Release** workflow is started manually on `main`. When it
