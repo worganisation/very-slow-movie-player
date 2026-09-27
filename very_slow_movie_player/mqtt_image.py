@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from json import dumps
-from ssl import create_default_context
+from ssl import CERT_REQUIRED
 from time import monotonic, sleep
 from uuid import uuid4
 
@@ -57,7 +57,7 @@ def publish_displayed_image(png: bytes) -> None:
             SETTINGS.mqtt_password.get_secret_value(),
         )
     if SETTINGS.mqtt_tls:
-        client.tls_set_context(create_default_context())  # pyright: ignore[reportUnknownMemberType] - Paho leaves SSLContext untyped
+        client.tls_set(cert_reqs=CERT_REQUIRED)  # pyright: ignore[reportUnknownMemberType] - Paho leaves VerifyMode untyped
 
     deadline = monotonic() + PUBLISH_DEADLINE_SECONDS
     loop_started = False

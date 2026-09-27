@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ipaddress import ip_address
 from pathlib import Path
-from re import fullmatch
+from re import ASCII, fullmatch
 from typing import Annotated, ClassVar, Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID  # noqa: TC003 - Pydantic needs this when building its schema
@@ -102,8 +102,7 @@ class Settings(BaseSettings):
         except ValueError:
             labels = host.split(".")
             valid_name = len(host) <= MAX_DNS_NAME_LENGTH and all(
-                fullmatch(r"[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?", label)
-                is not None
+                fullmatch(r"\w(?:[\w-]{0,61}\w)?", label, flags=ASCII) is not None
                 for label in labels
             )
             if not valid_name:
