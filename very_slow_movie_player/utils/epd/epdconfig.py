@@ -86,6 +86,10 @@ class SPIInterface(Protocol):
         """Send bytes over SPI."""
         ...
 
+    def writebytes2(self, data: bytes) -> None:
+        """Send a large payload using the driver's chunked transfer path."""
+        ...
+
     def close(self) -> None:
         """Close the SPI device."""
         ...
@@ -142,6 +146,10 @@ class RaspberryPi:
     def spi_writebyte(self, data: list[int]) -> None:
         """Write byte to SPI (Serial Peripheral Interface)."""
         self.spi.writebytes(data)
+
+    def spi_writebytes2(self, data: bytes) -> None:
+        """Write a contiguous block via spidev's chunking interface."""
+        self.spi.writebytes2(data)
 
     def module_init(self) -> Literal[0]:
         """Module initialization."""

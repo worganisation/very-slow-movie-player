@@ -86,6 +86,13 @@ refresh. This keeps the displayed image and controller registers without
 holding drive voltage throughout the pause. Command-order checks are
 hardware-free; verify image quality and power behavior on the physical panel
 before relying on this change in a deployed service.
+The [Waveshare V2 specification](https://files.waveshare.com/upload/6/60/7.5inch_e-Paper_V2_Specification.pdf)
+recommends at least 180 seconds between full updates; VSMP's existing video
+cadence is 120 seconds. Confirm the actual panel revision and long-term display
+quality before changing cadence or enabling revision-specific fast/partial modes.
+
+Frame packing and SPI block writes reduce Python and GPIO transfer overhead.
+The panel still uses its normal full refresh, including its visible flash.
 
 ### Home Assistant displayed image
 
