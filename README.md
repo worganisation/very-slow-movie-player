@@ -130,11 +130,13 @@ the current physical image in place. Source changes wake a playback wait but
 cannot interrupt an active panel refresh. An edited gamma takes effect on the
 next frame; use **Redisplay current frame** to show it sooner. **Next** advances
 one video step or skips the displayed Immich asset, and **Restart current video**
-starts that video's frame position at zero. Manual requests coalesce and wait
-for the same 180-second panel minimum. Playback status, current displayed media,
-video position, last successful refresh, next scheduled refresh, and last error
-are reported as sensors. Configured source and current displayed media are
-separate while a source change is pending.
+starts that video's frame position at zero. Both refresh interval controls have
+a three-minute minimum, which also applies to manual requests. Playback status,
+the displayed media filename, one-based current video frame, total video frame
+count, last successful refresh, next scheduled refresh, and last error are
+reported as sensors. The frame sensors are unknown while a photo is displayed.
+Configured source and current displayed media are separate while a source
+change is pending.
 
 All commands use `vsmp/vsmp_pi/command/...`; confirmed states use
 `vsmp/vsmp_pi/state/...`. Discovery and state are retained; commands are not.

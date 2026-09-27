@@ -280,14 +280,16 @@ class PlaybackRuntime:
         self.current_path: Path | None = None
         self.current_kind: str = "video"
         self.current_media: str = "none"
-        self.current_position: str = "none"
+        self.current_frame: int | None = None
+        self.current_frame_count: int | None = None
         self.current_video: tuple[Path, int, float, int] | None = None
         self.next_album_refresh: float = 0
         self.selection: tuple[str, Path, str, str] = self.selection_key()
         self.buttons: set[str] = set()
         self.mqtt.state("playback_status", "starting")
         self.mqtt.state("current_media", "none")
-        self.mqtt.state("video_position", "none")
+        self.mqtt.state("video_current_frame", "None")
+        self.mqtt.state("video_frame_count", "None")
         self.mqtt.state("last_error", "none")
         self.mqtt.state("last_refresh", "None")
         self.mqtt.state("next_refresh", "None")
@@ -387,7 +389,8 @@ class PlaybackRuntime:
         self,
         path: Path,
         media: str,
-        position: str = "none",
+        current_frame: int | None = None,
+        frame_count: int | None = None,
         *,
         kind: str = "video",
         video_frame: tuple[Path, int, float, int] | None = None,
@@ -396,11 +399,18 @@ class PlaybackRuntime:
         self.last_panel_refresh = monotonic()
         self.current_path = path
         self.current_kind = kind
-        self.current_media = media
-        self.current_position = position
+        self.current_media = Path(media).name
+        self.current_frame = current_frame
+        self.current_frame_count = frame_count
         self.current_video = video_frame
-        self.mqtt.state("current_media", media[:255])
-        self.mqtt.state("video_position", position)
+        self.mqtt.state("current_media", self.current_media[:255])
+        self.mqtt.state(
+            "video_current_frame",
+            str(current_frame) if current_frame is not None else "None",
+        )
+        self.mqtt.state(
+            "video_frame_count", str(frame_count) if frame_count is not None else "None"
+        )
         self.mqtt.state("last_refresh", datetime.now(UTC).isoformat())
         self.mqtt.state("playback_status", "playing")
         self.mqtt.state("last_error", "none")
@@ -428,7 +438,8 @@ class PlaybackRuntime:
                 self.mark_displayed(
                     image_path,
                     self.current_media,
-                    self.current_position,
+                    self.current_frame,
+                    self.current_frame_count,
                     kind=self.current_kind,
                     video_frame=self.current_video,
                 )
@@ -508,7 +519,8 @@ def play_video(
         runtime.mark_displayed(
             output,
             media_label or str(video_path),
-            f"{frame + 1}/{frame_count}",
+            frame + 1,
+            frame_count,
             video_frame=(video_path, frame, fps, stream_index),
         )
         set_progress(video_path, frame, frame_count)
@@ -522,7 +534,7 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
     if runtime.controls.media_type == "videos" and asset.kind != "VIDEO":
         return
     media = album.download(asset)
-    media_label = f"{asset.filename} [{asset.id}]"
+    media_label = asset.filename
     if asset.kind == "VIDEO":
         play_video(runtime, media, immich=True, media_label=media_label)
         return
