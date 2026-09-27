@@ -80,6 +80,12 @@ is only a software mock. For local development without a panel, set
 `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop or playback
 failure, VSMP attempts to sleep the display and release its GPIO and SPI
 resources before exiting.
+After each completed clear or frame refresh, the driver powers off the panel
+booster and VCOM during the long playback pause, then powers on for the next
+refresh. This keeps the displayed image and controller registers without
+holding drive voltage throughout the pause. Command-order checks are
+hardware-free; verify image quality and power behavior on the physical panel
+before relying on this change in a deployed service.
 
 ### Home Assistant displayed image
 

@@ -30,15 +30,19 @@ THE SOFTWARE.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from logging import getLogger
+from sys import exception as active_exception
 from time import monotonic, sleep
-from typing import TYPE_CHECKING, Final, Protocol, cast
+from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from .epdconfig import RaspberryPi
 
 LOGGER = getLogger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from PIL.Image import Image
 
 
@@ -59,6 +63,8 @@ class EPaperDisplay:
 
     def __init__(self) -> None:
         self.pi: RaspberryPi = RaspberryPi()
+        self._power_state: Literal["off", "on", "unknown"] = "unknown"
+        self._deep_sleep: bool = False
 
         self.reset_pin: int = self.pi.RST_PIN
         self.dc_pin: int = self.pi.DC_PIN
@@ -107,6 +113,43 @@ class EPaperDisplay:
 
         self.pi.delay_ms(200)
 
+    def power_on(self) -> None:
+        """Energize the panel before a refresh, retaining configured registers."""
+        if self._deep_sleep:
+            raise RuntimeError("Reset the e-paper display before waking from deep sleep")
+        if self._power_state == "on":
+            return
+        # A failed command or BUSY wait may still have switched on the booster.
+        self._power_state = "unknown"
+        self.send_command(0x04)
+        self.pi.delay_ms(100)
+        self.read_busy()
+        self._power_state = "on"
+
+    def power_off(self) -> None:
+        """Remove panel drive voltage without losing controller configuration."""
+        if self._deep_sleep or self._power_state == "off":
+            return
+        self._power_state = "unknown"
+        self.send_command(0x02)
+        self.read_busy()
+        self._power_state = "off"
+
+    @contextmanager
+    def _powered_for_refresh(self) -> Generator[None]:
+        """Power down after each refresh while preserving the original failure."""
+        try:
+            self.power_on()
+            yield
+        finally:
+            previous_error = active_exception()
+            try:
+                self.power_off()
+            except BaseException:
+                if previous_error is None:
+                    raise
+                LOGGER.exception("E-paper power-off also failed")
+
     def init(self) -> int:
         """Initialize the display."""
         _ = self.pi.module_init()
@@ -119,9 +162,9 @@ class EPaperDisplay:
         self.send_data(0x3F)  # VDH=15V
         self.send_data(0x3F)  # VDL=-15V
 
-        self.send_command(0x04)  # POWER ON
-        self.pi.delay_ms(100)
-        self.read_busy()
+        self._power_state = "off"  # Hardware reset disables the booster.
+        self._deep_sleep = False
+        self.power_on()
 
         self.send_command(0x00)  # PANEL SETTING
         self.send_data(0x1F)  # KW-3f   KWR-2F	BWROTP 0f	BWOTP 1f
@@ -173,32 +216,35 @@ class EPaperDisplay:
 
     def display(self, image: list[int]) -> None:
         """Display the image."""
-        self.send_command(0x13)
-        for i in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(~image[i])
+        with self._powered_for_refresh():
+            self.send_command(0x13)
+            for i in range(int(self.WIDTH * self.HEIGHT / 8)):
+                self.send_data(~image[i])
 
-        self.send_command(0x12)
-        self.pi.delay_ms(100)
-        self.read_busy()
+            self.send_command(0x12)
+            self.pi.delay_ms(100)
+            self.read_busy()
 
     def clear(self) -> None:
         """Clear the display."""
-        self.send_command(0x10)
-        for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(0x00)
+        with self._powered_for_refresh():
+            self.send_command(0x10)
+            for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
+                self.send_data(0x00)
 
-        self.send_command(0x13)
-        for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
-            self.send_data(0x00)
+            self.send_command(0x13)
+            for _ in range(int(self.WIDTH * self.HEIGHT / 8)):
+                self.send_data(0x00)
 
-        self.send_command(0x12)
-        self.pi.delay_ms(100)
-        self.read_busy()
+            self.send_command(0x12)
+            self.pi.delay_ms(100)
+            self.read_busy()
 
     def sleep(self) -> None:
         """Enter deep sleep mode."""
-        self.send_command(0x02)  # POWER_OFF
-        self.read_busy()
-
+        if self._deep_sleep:
+            return
+        self.power_off()
         self.send_command(0x07)  # DEEP_SLEEP
         self.send_data(0xA5)
+        self._deep_sleep = True
