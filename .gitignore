@@ -1,4 +1,5 @@
 *.env
+.media/
 !sample.env
 *.zip
 .idea

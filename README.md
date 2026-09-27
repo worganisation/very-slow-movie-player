@@ -1,13 +1,18 @@
 # Very Slow Movie Player
 
-## Local playback
+## Media source
+
+`VSMP_SOURCE` selects `local` (the default) or `immich`. Local playback uses
+`VSMP_VIDEO_PATH` exactly as before. Keep the source settings in the Pi's
+private `.env`.
+
+### Local video
 
 Set `VSMP_VIDEO_PATH` in the Pi's private `.env` to the absolute path of a
 local video, then start `vsmp.service`. VSMP displays one frame every two
 minutes and records its position in `very_slow_movie_player/.media/` so it can
 resume after a restart. The media directory is created on first run. The
-video loops after its final frame. The Google Photos album is no longer
-consulted.
+video loops after its final frame when systemd restarts the service.
 
 Progress is saved by replacing the log atomically. If the JSON is damaged,
 VSMP preserves it beside the log as `progress_log.json.corrupt-*`, writes a
@@ -18,6 +23,32 @@ For example:
 ```dotenv
 VSMP_VIDEO_PATH=/home/worgarside/movies/example.mp4
 ```
+
+### Immich album
+
+Create an Immich API key with album read, asset read, asset view, and asset download access,
+then set:
+
+```dotenv
+VSMP_SOURCE=immich
+IMMICH_URL=https://immich.example.com
+IMMICH_API_KEY=your-private-api-key
+IMMICH_ALBUM_ID=00000000-0000-0000-0000-000000000000
+```
+
+`IMMICH_URL` is the server URL with or without `/api`. Use the album's UUID,
+not its name. VSMP pages through the album with Immich's metadata search API,
+downloads preview images and original videos into `.media/immich/`, then
+displays each image for five minutes and videos at the usual frame interval.
+Downloads use asset IDs as filenames and are cached across restarts. An empty
+album leaves the current display undisturbed; VSMP checks again after five
+minutes. Original videos remain cached, so size the Pi's `.media` storage for
+the album or prune `.media/immich/` when needed.
+
+The integration follows Immich's [OpenAPI specification](https://github.com/immich-app/immich/blob/main/open-api/immich-openapi-specs.json)
+for metadata search, image previews, and original downloads. Older servers use
+the `albumIds` search field; when that field is rejected, VSMP uses the newer
+structured album filter and cursor.
 
 `VSMP_IMAGE_GAMMA` controls midtone darkening before the frame is dithered for
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original

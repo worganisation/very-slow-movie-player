@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from fractions import Fraction
+from itertools import chain
 from math import ceil
 from math import pow as float_pow
 from os import getenv
 from pathlib import Path
 from time import sleep
+from typing import TYPE_CHECKING
 
+from immich import Asset, ImmichAlbum
 from PIL import Image
 from PIL.Image import Dither, Resampling
 from utils import EPaperDisplay, const
@@ -18,6 +22,9 @@ from wg_utilities.loggers import get_streaming_logger
 
 from ffmpeg import input as ffmpeg_input
 from ffmpeg import probe
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 LOGGER = get_streaming_logger(__name__)
 
@@ -282,26 +289,57 @@ def choose_next_video() -> Path | None:
     return None
 
 
+def play_immich_asset(album: ImmichAlbum, asset: Asset) -> None:
+    """Display one album asset using the existing image and video paths."""
+    media = album.download(asset)
+    if asset.kind == "VIDEO":
+        play_video(media)
+    else:
+        display_image(media, 300)
+
+
 @process_exception(logger=LOGGER)
 def main() -> None:
-    """Play the local video selected in ``VSMP_VIDEO_PATH``."""
-    video_path = getenv("VSMP_VIDEO_PATH")
-    if not video_path:
-        raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+    """Play a configured local video, or assets from an Immich album."""
+    source = getenv("VSMP_SOURCE", "local").casefold()
+    if source not in {"local", "immich"}:
+        raise ValueError("VSMP_SOURCE must be 'local' or 'immich'")
 
-    video = Path(video_path).expanduser()
-    if not video.is_file():
-        raise FileNotFoundError(video)
+    with ExitStack() as stack:
+        video: Path | None = None
+        assets: Iterator[Asset] | None = None
+        first_asset: Asset | None = None
+        album = stack.enter_context(ImmichAlbum()) if source == "immich" else None
+        if album is None:
+            video_path = getenv("VSMP_VIDEO_PATH")
+            if not video_path:
+                raise ValueError("VSMP_VIDEO_PATH must point to a local video")
+            video = Path(video_path).expanduser()
+            if not video.is_file():
+                raise FileNotFoundError(video)
+        else:
+            assets = iter(album.assets())
+            first_asset = next(assets, None)
+            if first_asset is None:
+                LOGGER.warning("The configured Immich album contains no assets")
+                sleep(300)
+                return
 
-    _ = load_progress()
+        _ = load_progress()
 
-    _ = DISPLAY.init()
-    try:
-        DISPLAY.clear()
-        play_video(video)
-    finally:
-        DISPLAY.sleep()
-        DISPLAY.pi.module_exit()
+        _ = DISPLAY.init()
+        try:
+            DISPLAY.clear()
+            if video is not None:
+                play_video(video)
+            elif album is not None and first_asset is not None and assets is not None:
+                for asset in chain((first_asset,), assets):
+                    play_immich_asset(album, asset)
+            else:
+                raise RuntimeError("No playback source was prepared")
+        finally:
+            DISPLAY.sleep()
+            DISPLAY.pi.module_exit()
 
 
 if __name__ == "__main__":
