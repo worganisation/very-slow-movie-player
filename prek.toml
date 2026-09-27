@@ -95,6 +95,7 @@ hooks = [
       "wg-utilities[loggers]==5.17.4",
       "yt-dlp[default]==2026.8.19",
       "Pillow==12.3.0",
+      "httpx==0.28.1",
       "types-RPi.GPIO",
       "ffmpeg-python==0.2.0"
     ]
