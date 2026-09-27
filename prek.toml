@@ -94,7 +94,7 @@ hooks = [
       "pydantic==2.13.5",
       "pydantic-settings==2.15.0",
       "paho-mqtt==2.1.0",
-      "wg-utilities[loggers]==5.17.4",
+      "loguru==0.7.3",
       "yt-dlp[default]==2026.8.19",
       "Pillow==12.3.0",
       "httpx2==2.13.1",
