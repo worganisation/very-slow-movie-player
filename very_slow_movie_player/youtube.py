@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from os import environ
 from typing import ClassVar, Literal
 
 from httpx import get
@@ -79,10 +80,11 @@ def get_playlist_content(playlist_id: str) -> list[YouTubeVideoInfo]:
     Returns:
         list: a list of videos in the YouTube playlist
     """
+    api_key = environ["YT_API_KEY"]
     res = get(
         "https://youtube.googleapis.com/youtube/v3/playlistItems",
         params={
-            "key": const.YT_API_KEY,
+            "key": api_key,
             "playlistId": playlist_id,
             "maxResults": 50,
             "part": "snippet",
@@ -103,7 +105,7 @@ def get_playlist_content(playlist_id: str) -> list[YouTubeVideoInfo]:
         res = get(
             "https://www.googleapis.com/youtube/v3/playlistItems",
             params={
-                "key": const.YT_API_KEY,
+                "key": api_key,
                 "playlistId": playlist_id,
                 "maxResults": 50,
                 "part": "snippet",
@@ -125,10 +127,11 @@ def get_playlist_content(playlist_id: str) -> list[YouTubeVideoInfo]:
 @process_exception()
 def main() -> None:
     """Iterate through the playlist and download each video."""
+    playlist_id = environ["YT_PLAYLIST_ID"]
     with YoutubeDL(const.YDL_OPTS) as ydl:
         ydl.download([
             f"https://www.youtube.com/watch?v={video.resource_id.video_id}"
-            for video in get_playlist_content(const.YT_PLAYLIST_ID)
+            for video in get_playlist_content(playlist_id)
             if not (const.MEDIA_DIR / (video.sanitized_title + ".mp4")).is_file()
         ])
 
