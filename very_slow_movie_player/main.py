@@ -336,6 +336,11 @@ def clean_up_display(*, enter_sleep: bool, previous_error: BaseException | None)
             DISPLAY.sleep()
         except BaseException as exc:  # noqa: BLE001 - preserve cleanup on SIGTERM
             cleanup_error = exc
+    else:
+        try:
+            DISPLAY.power_off()
+        except BaseException as exc:  # noqa: BLE001 - preserve partial-init failure
+            cleanup_error = exc
     try:
         DISPLAY.pi.module_exit()
     except BaseException as exc:
