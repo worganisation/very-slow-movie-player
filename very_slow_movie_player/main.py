@@ -22,11 +22,13 @@ from controls import (
     load_controls,
     save_controls,
 )
+from dithering import dither_image
 from immich import Asset, ImmichAlbum
 from library_runtime import LibraryRuntime
 from mqtt_controls import HAClient
 from PIL import Image, ImageOps
-from PIL.Image import Dither, Resampling
+from PIL.Image import Resampling
+from settings import SETTINGS
 from utils import EPaperDisplay, const
 from utils.logging import logger
 from utils.progress import get_progress, load_progress, set_progress
@@ -200,7 +202,10 @@ def display_image(
         grayscale.point(  # pyright: ignore[reportUnknownMemberType]
             [round(255 * float_pow(value / 255, gamma)) for value in range(256)],
         ) as darkened,
-        darkened.convert(mode="1", dither=Dither.FLOYDSTEINBERG) as monochrome,
+        dither_image(
+            darkened,
+            controls.dithering_method if controls else SETTINGS.vsmp_dithering_method,
+        ) as monochrome,
     ):
         rendered = monochrome
         displayed_caption = ""
@@ -213,6 +218,7 @@ def display_image(
                     background=controls.caption_background,
                     font=controls.caption_font,
                     font_size=controls.caption_font_size,
+                    dithering_method=controls.dithering_method,
                 )
             except (ValueError, RuntimeError) as exc:
                 mqtt.state("caption_error", str(exc)[:255])
@@ -435,6 +441,7 @@ class PlaybackRuntime:
         except Exception as exc:  # noqa: BLE001 - invalid input cannot replace good state
             self.mqtt.state("last_error", f"{name}: {exc}"[:255])
             return
+        rendering_changed = candidate.dithering_method != self.controls.dithering_method
         self.controls = candidate
         self.overridden.add(name)
         self.publish_controls()
@@ -443,6 +450,8 @@ class PlaybackRuntime:
             self.selection = self.selection_key()
             self.buttons.clear()
             self.mqtt.state("playback_status", "switching source")
+        if rendering_changed and self.current_path is not None:
+            self.buttons.add("redisplay")
         if name == "album":
             self.next_album_refresh = 0
 
@@ -528,8 +537,7 @@ class PlaybackRuntime:
     def redisplay_if_ready(self) -> bool:
         """Recompose the last frame when requested and the panel dwell has elapsed."""
         if not (
-            self.controls.playback_enabled
-            and "redisplay" in self.buttons
+            "redisplay" in self.buttons
             and self.current_path is not None
             and self._minimum_wait() <= 0
         ):
@@ -651,7 +659,7 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
         return
     if not runtime.wait_ready(runtime.selection):
         return
-    display_image(media, runtime.controls.gamma, runtime.mqtt)
+    display_image(media, runtime.controls.gamma, runtime.mqtt, controls=runtime.controls)
     runtime.mark_displayed(media, media_label, kind="photo")
     if runtime.wait_ready(runtime.selection):
         runtime.buttons.discard("next")

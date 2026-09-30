@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import unittest
 
+from dithering import DitheringMethod, dither_image
 from PIL import Image, ImageChops
 
 from very_slow_movie_player.caption_render import CaptionLayoutError, render_caption
@@ -74,6 +75,28 @@ class CaptionRenderTests(unittest.TestCase):
             self.frame.crop((0, 0, 800, 384)).tobytes(),
         )
         self.assertIn(1, result.crop((20, 384, 780, 480)).get_flattened_data())
+
+    def test_methods_apply_after_photo_resize_without_coarsening_text(self) -> None:
+        """Every mode affects the photo but leaves native caption pixels identical."""
+        grayscale = Image.linear_gradient("L").resize((800, 480))
+        for style in ("margin", "overlay"):
+            baseline = render_caption(grayscale, "Sharp text.", style=style)
+            for method in DitheringMethod:
+                result = render_caption(
+                    grayscale, "Sharp text.", style=style, dithering_method=method
+                )
+                self.assertEqual(
+                    result.crop((0, 384, 800, 480)).tobytes(),
+                    baseline.crop((0, 384, 800, 480)).tobytes(),
+                )
+                if style == "margin":
+                    source = grayscale.resize((640, 384), Image.Resampling.LANCZOS)
+                    expected = dither_image(source, method)
+                    actual = result.crop((80, 0, 720, 384))
+                else:
+                    expected = dither_image(grayscale, method).crop((0, 0, 800, 384))
+                    actual = result.crop((0, 0, 800, 384))
+                self.assertEqual(actual.tobytes(), expected.tobytes())
 
     def test_impossible_caption_raises(self) -> None:
         """The renderer must never silently cut off words."""
