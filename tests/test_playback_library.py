@@ -47,6 +47,149 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_dithering_discovery_validation_and_persistence(self) -> None:
+        """All advertised methods round-trip through validated durable controls."""
+        import json
+        import sqlite3
+
+        from dithering import DitheringMethod
+        from mqtt_controls import HAClient
+
+        client = HAClient(self.controls.CommandMailbox())
+        client.client = Mock()
+        client.client.is_connected.return_value = True
+        client._announce()
+        topic = (
+            f"{client.discovery}/select/vsmp_{client.device_id}_dithering_method/config"
+        )
+        config = next(
+            json.loads(call.args[1])
+            for call in client.client.publish.call_args_list
+            if call.args[0] == topic
+        )
+        self.assertEqual(config["options"], list(DitheringMethod))
+        self.assertEqual(config["icon"], "mdi:dots-grid")
+        self.assertFalse(config["optimistic"])
+        database = self.root / "dither.sqlite3"
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE control_overrides (name TEXT PRIMARY KEY, value TEXT)"
+            )
+        with (
+            patch.object(self.controls, "initialize"),
+            patch.object(
+                self.controls, "connect", side_effect=lambda: sqlite3.connect(database)
+            ),
+            patch.object(
+                self.controls.PlaybackControls, "defaults", return_value=self.defaults
+            ),
+        ):
+            for method in DitheringMethod:
+                candidate = self.controls.apply_command(
+                    self.defaults, "dithering_method", method
+                )
+                self.controls.save_controls(candidate, {"dithering_method"})
+                restored, names = self.controls.load_controls()
+                self.assertEqual(restored.dithering_method, method)
+                self.assertEqual(names, {"dithering_method"})
+            with self.assertRaises(ValueError):
+                self.controls.apply_command(self.defaults, "dithering_method", "invalid")
+            self.assertEqual(self.controls.load_controls()[0], restored)
+
+    def test_display_uses_selected_method_for_panel_and_mqtt_image(self) -> None:
+        """Physical pixels and the HA preview use the same selected renderer."""
+        from io import BytesIO
+
+        from dithering import DitheringMethod, dither_image
+
+        path = self.root / "frame.png"
+        source = Image.linear_gradient("L").resize((800, 480))
+        source.save(path)
+        controls = self.defaults.model_copy(
+            update={"dithering_method": DitheringMethod.ORDERED}
+        )
+        expected = dither_image(source, DitheringMethod.ORDERED).tobytes()
+        mqtt = Mock()
+        with (
+            patch.object(self.main, "format_image", return_value=path),
+            patch.object(self.main, "DISPLAY") as panel,
+        ):
+            panel.getbuffer.side_effect = lambda image: image.tobytes()
+            self.main.display_image(path, 1.0, mqtt, controls=controls)
+            panel.display.assert_called_once_with(expected)
+        with Image.open(BytesIO(mqtt.image.call_args.args[0])) as preview:
+            self.assertEqual(preview.tobytes(), expected)
+
+    def test_dithering_environment_and_mailbox_validation(self) -> None:
+        """Invalid defaults fail early and replayed commands cannot change settings."""
+        from dithering import DitheringMethod
+        from pydantic import ValidationError
+        from settings import SETTINGS, Settings
+
+        with self.assertRaises(ValidationError):
+            Settings.model_validate({
+                **SETTINGS.model_dump(),
+                "vsmp_dithering_method": "invalid",
+            })
+        mailbox = self.controls.CommandMailbox()
+        mailbox.submit("dithering_method", DitheringMethod.FLOYD_SQUARE, retained=True)
+        self.assertEqual(mailbox.drain(), ({}, set()))
+        mailbox.submit("dithering_method", DitheringMethod.ORDERED, retained=False)
+        mailbox.submit(
+            "dithering_method", DitheringMethod.ORDERED_VERTICAL, retained=False
+        )
+        self.assertEqual(
+            mailbox.drain(),
+            ({"dithering_method": DitheringMethod.ORDERED_VERTICAL}, set()),
+        )
+
+    def test_dithering_change_redisplays_same_frame_while_paused_after_dwell(
+        self,
+    ) -> None:
+        """Changing the mode coalesces a redisplay without advancing the movie."""
+        from dithering import DitheringMethod
+
+        runtime = object.__new__(self.main.PlaybackRuntime)
+        runtime.controls = self.defaults.model_copy(update={"playback_enabled": False})
+        runtime.overridden = set()
+        runtime.buttons = set()
+        runtime.mqtt = Mock()
+        runtime.current_path = self.root / "frame.png"
+        runtime.current_video = (self.root / "video.mp4", 16385, 24.0, 0, 0.0)
+        runtime.current_media = "movie"
+        runtime.current_frame = 16386
+        runtime.current_frame_count = 115939
+        runtime.current_kind = "video"
+        runtime.selection = runtime.selection_key()
+        with patch.object(self.main, "save_controls"):
+            runtime.apply_setting("dithering_method", DitheringMethod.ORDERED)
+        self.assertEqual(runtime.buttons, {"redisplay"})
+        with (
+            patch.object(runtime, "_minimum_wait", return_value=1),
+            patch.object(self.main, "display_image") as display,
+        ):
+            self.assertFalse(runtime.redisplay_if_ready())
+            display.assert_not_called()
+        with (
+            patch.object(runtime, "_minimum_wait", return_value=0),
+            patch.object(
+                self.main, "extract_frame", return_value=runtime.current_path
+            ) as extract,
+            patch.object(self.main, "display_image") as display,
+            patch.object(runtime, "mark_displayed") as mark,
+        ):
+            self.assertTrue(runtime.redisplay_if_ready())
+            extract.assert_called_once_with(
+                self.root / "video.mp4", 16385, fps=24.0, stream_index=0, start_time=0.0
+            )
+            self.assertEqual(
+                display.call_args.kwargs["controls"].dithering_method,
+                DitheringMethod.ORDERED,
+            )
+            self.assertEqual(mark.call_args.args[2], 16386)
+        self.assertEqual(runtime.buttons, set())
+        self.assertFalse(runtime.controls.playback_enabled)
+
     def test_import_fields_allow_empty_state_and_reannounce_after_restart(self) -> None:
         """Blank request fields remain valid after startup, clearing and HA birth."""
         import json

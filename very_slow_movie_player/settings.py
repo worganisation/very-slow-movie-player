@@ -9,6 +9,7 @@ from typing import Annotated, ClassVar, Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID  # noqa: TC003 - Pydantic needs this when building its schema
 
+from dithering import DitheringMethod
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
+    vsmp_dithering_method: DitheringMethod = DitheringMethod.FLOYD_STEINBERG
     vsmp_source: Literal["local", "immich", "library"] = "local"
     vsmp_video_path: Path
     immich_url: AnyHttpUrl

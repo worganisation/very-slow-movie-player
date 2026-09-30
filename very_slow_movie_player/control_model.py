@@ -7,6 +7,7 @@ from pathlib import Path  # noqa: TC003 - Pydantic resolves this annotation at r
 from typing import Annotated, Literal
 from uuid import UUID  # noqa: TC003 - Pydantic resolves this annotation at runtime
 
+from dithering import DitheringMethod
 from pydantic import BaseModel, Field, field_validator
 from settings import SETTINGS
 
@@ -24,6 +25,7 @@ CONTROL_NAMES = frozenset({
     "photo_interval",
     "frame_advance",
     "gamma",
+    "dithering_method",
     "video_path",
     "album",
     "media_type",
@@ -41,6 +43,7 @@ class PlaybackControls(BaseModel):
     photo_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
     frame_advance: Annotated[int, Field(ge=1, le=100000)]
     gamma: Annotated[float, Field(ge=0.1, le=10, allow_inf_nan=False)]
+    dithering_method: DitheringMethod = DitheringMethod.FLOYD_STEINBERG
     video_path: Path
     album: UUID
     media_type: Literal["photos", "videos", "both"]
@@ -79,6 +82,7 @@ class PlaybackControls(BaseModel):
             photo_interval=SETTINGS.vsmp_photo_frame_delay_seconds,
             frame_advance=SETTINGS.vsmp_video_frame_advance,
             gamma=SETTINGS.vsmp_image_gamma,
+            dithering_method=SETTINGS.vsmp_dithering_method,
             video_path=SETTINGS.vsmp_video_path,
             album=SETTINGS.immich_album_id,
             media_type=SETTINGS.immich_media_type,

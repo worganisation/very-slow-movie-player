@@ -91,6 +91,25 @@ structured album filter and cursor.
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
 brightness, or increase it for a darker image. The accepted range is 0.1 to 10.
 
+`VSMP_DITHERING_METHOD` sets the default dithering method. The MQTT-discovered
+**Dithering method** select overrides it persistently, without a restart:
+
+| Method | Detail and pattern tradeoff |
+| --- | --- |
+| `Floyd-Steinberg` | Original full-resolution error diffusion; default. |
+| `Ordered (Bayer 8x8)` | Full-resolution regular dots; reduced streaks in our panel trials. |
+| `Ordered (1x2 pixels)` | Vertical pixel pairs; less vertical detail, fewer bands in our trials. |
+| `Floyd-Steinberg (2x2 pixels)` | Coarser square pixels; reduced streaks at a noticeable detail cost. |
+| `Floyd-Steinberg (2x1 pixels)` | Horizontal pixel pairs; worsened streaks on our panel, available for comparison. |
+| `Threshold (no dithering)` | Solid black/white threshold; loses intermediate shades. |
+
+Changing the method queues **Redisplay current frame**, even while paused, and
+never advances the video position. Multiple changes before a refresh coalesce
+into the latest choice. The three-minute panel dwell still applies. Caption
+text and its background are drawn after dithering and retain native resolution.
+The choice applies to local/library videos and Immich photos/videos; no method
+guarantees artifact-free output on every panel or scene.
+
 Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
 missing, startup fails so the service does not report a working display that
 is only a software mock. For local development without a panel, set
@@ -124,7 +143,7 @@ visible even when the service disconnects. Control and status entities use an
 availability topic and become unavailable when the service disconnects.
 
 The device exposes Source, Playback enabled, Video refresh interval, Photo
-refresh interval, Video frame advance, Image gamma, Local video, Immich album,
+refresh interval, Video frame advance, Image gamma, Dithering method, Local video, Immich album,
 Immich media type, and Always restart videos. The album selector shows names
 from Immich and disambiguates duplicates with IDs; the selected value is stored
 as an immutable album UUID. `IMMICH_MEDIA_TYPE` defaults to `both` and accepts
