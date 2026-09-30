@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from dithering import DitheringMethod, dither_image
 from PIL import Image, ImageDraw, ImageFont
 
 _SIZE = (800, 480)
@@ -107,6 +108,7 @@ def render_caption(
     background: Literal["light", "dark"] = "light",
     font: Literal["serif", "sans"] = "serif",
     font_size: int = 26,
+    dithering_method: DitheringMethod = DitheringMethod.FLOYD_STEINBERG,
 ) -> Image.Image:
     """Return an 800x480 one-bit frame with the full caption visible.
 
@@ -122,6 +124,7 @@ def render_caption(
         background: ``light`` or ``dark`` band with contrasting text.
         font: ``serif`` or ``sans`` system TrueType font.
         font_size: Preferred caption size in pixels.
+        dithering_method: Photo quantization; caption glyphs retain native detail.
 
     Raises:
         ValueError: Input or options are invalid.
@@ -152,11 +155,11 @@ def render_caption(
             grayscale.resize(  # pyright: ignore[reportUnknownMemberType]
                 (photo_width, photo_height), Image.Resampling.LANCZOS
             ) as scaled,
-            scaled.convert("1", dither=Image.Dither.FLOYDSTEINBERG) as photo,
+            dither_image(scaled, dithering_method) as photo,
         ):
             result.paste(photo, ((_SIZE[0] - photo_width) // 2, 0))
     else:
-        result = image.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+        result = dither_image(image, dithering_method)
 
     draw = ImageDraw.Draw(result)
     ink = 1 - paper

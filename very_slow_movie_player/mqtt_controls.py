@@ -7,6 +7,7 @@ from ssl import CERT_REQUIRED
 from threading import Lock
 from typing import TYPE_CHECKING
 
+from dithering import DitheringMethod
 from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
 from paho.mqtt.enums import CallbackAPIVersion
 from settings import SETTINGS
@@ -34,6 +35,7 @@ ENTITY_ICONS = {
     "photo_interval": "mdi:timer-outline",
     "frame_advance": "mdi:fast-forward",
     "gamma": "mdi:brightness-6",
+    "dithering_method": "mdi:dots-grid",
     "caption_font_size": "mdi:format-size",
     "caption_offset": "mdi:timer-sync-outline",
     "captions_enabled": "mdi:closed-caption",
@@ -195,6 +197,7 @@ class HAClient:
     def _discovery(self) -> None:
         common = {"optimistic": False, "retain": False}
         for name, label, options in (
+            ("dithering_method", "Dithering method", list(DitheringMethod)),
             ("source", "Source", ["local", "immich", "library"]),
             ("media_type", "Immich media type", ["photos", "videos", "both"]),
             ("caption_style", "Caption style", ["margin", "overlay"]),
