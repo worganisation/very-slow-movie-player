@@ -1,0 +1,1549 @@
+7.5inch e-Paper HAT Manual - Waveshare Wiki
+Source: https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual
+Wiki revision: 110993
+Retrieved: 2026-10-03
+Text snapshot of article content; images are omitted. Consult the live manual for illustrations.
+
+|
+
+| 7.5inch e-Paper
+Raw Panel
+
+|  [https://www.waveshare.com/7.5inch-e-paper.htm]
+
+800×480, Black/White, RPI, SPI
+
+|
+
+| 7.5inch e-Paper (G)
+Optical Bonding Screen
+
+|  [https://www.waveshare.com/7.5inch-e-paper-g.htm]
+
+|
+
+| 7.5inch e-Paper HAT
+
+|
+
+|
+
+| {{{name4}}}
+
+|
+
+|
+
+| {{{name5}}}
+
+|
+
+|
+
+| {{{name6}}}
+
+|
+
+|
+
+|
+
+|
+
+| Primary Attribute
+
+|
+
+|
+
+| Category: OLEDs / LCDs, LCD
+
+| {{{userDefinedInfo}}}:
+
+| {{{userdefinedvalue}}}
+
+| Brand: Waveshare
+
+|
+
+|
+
+|
+
+| Website
+
+|
+
+|
+
+| International: HAT Ver.;  [https://www.waveshare.com/7.5inch-e-paper.htm] Raw Panel;  [https://www.waveshare.com/7.5inch-e-paper-g.htm] Fully Laminated Ver.
+
+| Chinese: 官方中文站点
+
+|
+
+|
+
+|
+
+| Onboard Interfaces
+
+|
+
+|
+
+|
+
+| SPI
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+| Related Products
+
+|
+
+|
+
+|
+
+4.3inch e-Paper UART Module
+
+13.3inch e-Paper HAT
+
+13.3inch HDMI e-Paper
+
+12.48inch e-Paper Module
+
+12.48inch e-Paper Module (B)
+
+10.3inch HDMI e-Paper
+
+10.3inch e-Paper HAT (D)
+
+10.3inch e-Paper HAT
+
+9.7inch HDMI e-Paper
+
+9.7inch e-Paper HAT
+
+7.8inch e-Paper HAT
+
+7.8inch HDMI e-Paper
+
+7.5inch HD e-Paper HAT
+
+7.5inch HD e-Paper HAT (B)
+
+7.5inch e-Paper HAT
+
+7.5inch e-Paper HAT (B)
+
+7.5inch e-Paper HAT (C)
+
+7.5inch e-Paper (G)
+
+7.5inch NFC-Powered e-Paper
+
+7.5inch NFC-Powered HD e-Paper
+
+6inch e-Paper HAT
+
+6inch HD e-Paper HAT
+
+5.83inch e-Paper HAT
+
+5.83inch e-Paper HAT (B)
+
+5.83inch e-Paper HAT (C)
+
+5.65inch e-Paper Module (F)
+
+4.2inch e-Paper Cloud Module
+
+4.2inch e-Paper Module
+
+4.2inch e-Paper Module (B)
+
+4.2inch e-Paper Module (C)
+
+4.2inch NFC-Powered e-Paper
+
+4.01inch e-Paper (F)
+
+4.01inch e-Paper HAT (F)
+
+3.7inch e-Paper
+
+3.7inch e-Paper HAT
+
+2.9inch e-Paper Module
+
+2.9inch e-Paper Module (B)
+
+2.9inch e-Paper Module (C)
+
+2.9inch e-Paper HAT (D)
+
+2.9inch Touch e-Paper HAT
+
+2.9inch NFC-Powered e-Paper
+
+2.7inch NFC-Powered e-Paper Module
+
+2.7inch e-Paper HAT
+
+2.7inch e-Paper HAT (B)
+
+2.66.inch e-Paper
+
+2.66inch e-Paper Module
+
+2.66inch e-Paper (B)
+
+2.66inch e-Paper Module (B)
+
+2.13inch e-Paper Cloud Module
+
+2.13inch e-Paper HAT
+
+2.13inch e-Paper HAT (B)
+
+2.13inch e-Paper HAT (C)
+
+2.13inch e-Paper HAT (D)
+
+2.13inch Touch e-Paper HAT
+
+2.13inch NFC-Powered e-Paper
+
+1.54inch NFC-Powered e-Paper (BB)
+
+1.54inch NFC-Powered e-Paper (BW)
+
+1.54inch e-Paper Module
+
+1.54inch e-Paper Module (B)
+
+1.54inch e-Paper Module (C)
+
+1.02inch e-paper Module
+
+e-Paper Driver HAT
+
+EINK-DISP-103
+
+E-Paper Shield
+
+e-Paper ESP8266 Driver Board
+
+E-Paper ESP32 Driver Board
+
+Contents
+
+1 Overview
+
+1.1 Version Description
+
+1.2 Parameter
+
+1.3 Communication Method
+
+1.4 Operating Principle
+
+1.5 Program Principle
+
+1.6 Precautions
+
+2 Working With Raspberry Pi
+
+2.1 Hardware Connection
+
+2.2 Enable SPI Interface
+
+2.3 C
+
+2.4 Python
+
+3 Working With Arduino
+
+3.1 Hardware Connection
+
+3.2 Install IDE
+
+3.3 Run The Demo
+
+4 Working With Jetson Nano
+
+4.1 Hardware Connection
+
+4.2 C
+
+4.3 Python
+
+5 Working With RDK X3
+
+5.1 Hardware Connection
+
+5.2 Enable SPI
+
+5.3 Python
+
+6 Working With STM32
+
+6.1 Hardware Connection
+
+6.2 Run The Demo
+
+7 ESP32/8266
+
+7.1 ESP32
+
+7.2 ESP8266
+
+8 Resources
+
+8.1 Documentation
+
+8.2 Demo code
+
+8.3 Development Resources
+
+8.4 Third Parties Example
+
+8.5 Related Links
+
+8.6 Project Resources
+
+9 FAQ
+
+9.1 Question about Software
+
+9.2 Question about Hardware
+
+9.3 Question about Screen
+
+10 Support
+
+Overview
+
+Version Description
+
+V2: The resolution is 800 × 480. The hardware structure and interface of the V2 version are compatible with the V1 version and adopt the V2 program. If you are purchasing for the first time, and there is a V2 label on the back of the screen, you can directly use the V2 program.
+
+The V2 version code has been upgraded to support partial refresh and fast refresh functionalities.
+
+For versions sold after September 2023, use the 7.5V2 program.
+
+For versions sold before September 2023, use the 7.5V2_old program.
+
+V1: The resolution is 640 × 384, using the V1 program. (More information can be found in the datasheet.)
+
+Parameter
+
+| Dimensions
+| 7.5inch
+
+| Outline Dimension (Driver Board)
+| 65.0mm × 30.2mm
+
+| Display Dimension
+| 163.2mm × 97.92mm
+
+| Outline Dimension (Raw Panel)
+| 170.2mm × 111.2mm × 1.18mm
+
+| Outline Dimension (Screen)
+| 177.2mm × 118.2mm
+
+| Operating Voltage
+| 3.3V / 5V (The IO level voltage must be consistent with the supply voltage)
+
+| Communication Interface
+| SPI
+
+| Dot Pitch
+| 0.205mm × 0.204mm
+
+| Resolution
+| 800 × 480
+
+| Display Color
+| Black, White
+
+| Grey Scale
+| 4
+
+| Full Refresh Time
+| 4s
+
+| Partial Refresh Time
+| 0.4s
+
+| Fast Refresh Time
+| 1.5s
+
+| Four Grayscale Refresh Time
+| 2.1s
+
+| Refresh Power
+| 26.4mW（typ.）
+
+| Standby Current
+| <0.01uA (almost 0)
+
+| Operating Temperature
+| 0 ~ 50 ℃
+
+| Storage Temperature
+| -25 ~ 70 ℃
+
+Refresh time: The refresh time is the experimental results, the actual refresh time will have errors, and the actual effect shall prevail. There will be a flickering effect during the global refresh process, this is a normal phenomenon.
+
+Refresh power consumption: The power consumption data is the experimental results. The actual power consumption will have a certain error due to the existence of the driver board and the actual use situation. The actual effect shall prevail.
+
+Refresh in a low temperature environment may appear color cast, it need to be static in the environment of 25℃ for 6 hours before refresh.
+
+Communication Method
+
+CSB (CS): Slave chip select signal, active at low level. When it is at low level, the chip is enabled.
+
+SCL (SCK/SCLK): Serial clock signal.
+
+D/C (DC): Data/command control signal, write command (Command) when the level is low; write data (Data/parameter) when the level is high.
+
+SDA (DIN): Serial data signal.
+
+Timing: CPHL=0, CPOL=0, i.e. SPI mode 0.
+
+Note: For specific information about SPI communication, you can search for information online on your own.
+
+Operating Principle
+
+The e-paper used in this product uses "microcapsule electrophoresis display" technology for image display. The basic principle is that charged nanoparticles suspended in a liquid migrate under the action of an electric field. The e-paper display screen displays patterns by reflecting ambient light and does not require a backlight. Under ambient light, the e-paper display screen is clearly visible, with a viewing angle of almost 180°. Therefore, e-paper displays are ideal for reading.
+
+Program Principle
+
+We define the pixels in a monochrome picture, 0 is black and 1 is white.
+
+White:□, Bit 1
+
+Black:■, Bit 0
+
+The dot in the figure is called a pixel. As we know, 1 and 0 are used to define the color, therefore we can use one bit to define the color of one pixel, and 1 byte = 8 pixels.
+
+For example, If we set the first 8 pixels to black and the last 8 pixels to white, we show it by codes, they will be 16-bit as below:
+
+For computer, the data is saved in MSB format:
+
+So we can use two bytes for 16 pixels.
+
+7.5inch e-Paper V2
+
+The display principle is exactly the same as above.
+
+7.5inch e-paper (V1)
+
+Because of the problem of the controller, it defines 0000b to indicate that the corresponding pixel is black, and 0011b to indicate that the corresponding pixel is white, which is 4bit = 1pixel, and the lowest two bits of the 4bit are both 0 to display black. On the contrary, the lowest two bits of 4bit are both 1 to display white. Other data will cause the color of the pixel to be uncertain;
+
+For example:
+
+0x00: 2 pixels ■■
+
+0x03: 2 pixels ■□
+
+0x30: 2 pixels □■
+
+0x33: 2 pixels □□
+
+Taking 4 pixels as an example, we assume that the first 2 pixels are black and the last 2 pixels are white, then the logic for people is like this, which is stored in sequence:
+
+For a computer, its data storage method is high-order first, low-order last, and a byte has only 8 bits, so it is stored in a byte like this:
+
+Precautions
+
+For e-Paper displays that support partial refresh, please note that you cannot refresh them with the partial refresh mode all the time. After refreshing partially several times, you need to fully refresh EPD once. Otherwise, the display effect will be abnormal, which cannot be repaired!
+
+Note that the screen cannot be powered on for a long time. When the screen is not refreshed, please set the screen to sleep mode or power off it. Otherwise, the screen will remain in a high voltage state for a long time, which will damage the e-Paper and cannot be repaired!
+
+When using the e-Paper display, it is recommended that the refresh interval is at least 180s, and refresh at least once every 24 hours. If the e-Paper is not used for a long time, you should use the program to clear the screen before storing it. (Refer to the datasheet for specific storage environment requirements.)
+
+After the screen enters sleep mode, the sent image data will be ignored, and it can be refreshed normally only after initializing again.
+
+Control the 0x3C or 0x50 (refer to the datasheet for details) register to adjust the border color. In the demo, you can adjust the Border Waveform Control register or VCOM AND DATA INTERVAL SETTING to set the border.
+
+If you find that the created image data is displayed incorrectly on the screen, it is recommended to check whether the image size setting is correct, change the width and height settings of the image and try again.
+
+The working voltage of the e-Paper display is 3.3V. If you buy the raw panel, you need to add a level convert circuit for compatibility with 5V voltage. The new version of the driver board (V2.1 and subsequent versions) has been added a level processing circuit, which can support both 3.3V and 5V. The old version only supports a 3.3V working environment. You can confirm the version before using it. (The one with the 20-pin chip on the PCB is generally the new version. And the version number is under the board name.)
+
+The FPC cable of the screen is fragile, Please note: Do not bend the cable along the vertical direction of the screen to avoid tearing the cable; Do not repeatedly excessive bending line to avoid line fracture; Do not bend the cable toward the front of the screen to prevent the cable from being disconnected from the panel. It is recommended to use after fixing the cable during debugging and development.
+
+The screen of e-Paper is relatively fragile, please try to avoid dropping, bumping and pressing hard.
+
+We recommend that customers use the sample program provided by us to test with the corresponding development board.
+
+Working With Raspberry Pi
+
+Hardware Connection
+
+When connecting the Raspberry Pi, you can directly insert the board into the 40PIN pin header of the Raspberry Pi, and pay attention to the correct pins.
+
+If you choose to connect with an 8PIN cable, please refer to the pin correspondence table below:
+
+Raspberry Pi Pinout
+
+| e-Paper
+
+| Raspberry Pi
+
+| BCM2835
+
+| Board
+
+| VCC
+| 3.3V
+| 3.3V
+
+| GND
+| GND
+| GND
+
+| DIN
+| MOSI
+| 19
+
+| CLK
+| SCLK
+| 23
+
+| CS
+| CE0
+| 24
+
+| DC
+| 25
+| 22
+
+| RST
+| 17
+| 11
+
+| BUSY
+| 24
+| 18
+
+| PWR
+| 18
+| 12
+
+Enable SPI Interface
+
+Open the Raspberry Pi terminal and enter the following command in the config interface:
+
+sudo raspi-config
+Choose Interfacing Options -> SPI -> Yes to enable SPI interface
+
+Then reboot your Raspberry Pi:
+
+sudo reboot
+
+Check /boot/config.txt, and you can see 'dtparam=spi=on' was written in.
+
+To make sure SPI is not occupied, it is recommended to close other drivers' coverage. You can use ls /dev/spi* to check whether SPI is occupied. If the terminal outputs /dev/spidev0.0 and /dev/spidev0.1, SPI is not occupied.
+
+C
+
+Install lg library
+
+#Open the Raspberry Pi terminal and run the following commands:
+wget https://github.com/joan2937/lg/archive/master.zip
+unzip master.zip
+cd lg-master
+make
+sudo make install
+#For more details, you can refer to the source code: https://github.com/gpiozero/lg
+
+Install gpiod library (Optional)
+
+#Open the Raspberry Pi terminal and run the following commands:
+sudo apt-get update
+sudo apt install gpiod libgpiod-dev
+
+Install BCM2835 (Optional):
+
+#Open the Raspberry Pi terminal and run the following command
+wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.71.tar.gz
+tar zxvf bcm2835-1.71.tar.gz
+cd bcm2835-1.71/
+sudo ./configure && sudo make && sudo make check && sudo make install
+# For more information, please refer to the official website: http://www.airspayce.com/mikem/bcm2835/
+
+Install WiringPi (Optional):
+
+#Open the Raspberry Pi terminal and run the following command:
+sudo apt-get install wiringpi
+#For Raspberry Pi systems after May 2019 (earlier than before, you may not need to execute), you may need to upgrade:
+wget https://project-downloads.drogon.net/wiringpi-latest.deb
+sudo dpkg -i wiringpi-latest.deb
+gpio -v
+#Run gpio -v and version 2.52 will appear. If it does not appear, the installation is wrong.
+
+#Bullseye branch system use the following command:
+git clone https://github.com/WiringPi/WiringPi
+cd WiringPi
+./build
+gpio -v
+# Run gpio -v and version 2.60 will appear. If it does not appear, it means that there is an installation error.
+
+Download the demo via GitHub (You can skip this step if you have downloaded it.):
+
+git clone https://github.com/waveshare/e-Paper.git
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Download the demo (You can skip this step if you have downloaded it.):
+
+wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
+unzip E-Paper_code.zip -d e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Alternate decompression method:
+
+sudo apt-get install p7zip-full
+7z x E-Paper_code.zip -O./e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Compile the demo (Note: -j4 is to compile with 4 threads, the numbers can be modified by yourself; EPD=epd7in5V2 is to specify a macro definition, and epd7in5v2 corresponds to the test demo in the main function).
+
+# Now at e-Paper/RaspberryPi_JetsonNano
+cd c
+sudo make clean
+sudo make -j4 EPD=epd7in5V2
+
+Run the demo.
+
+sudo ./epd
+
+Python
+
+Install the function library:
+
+sudo apt-get update
+sudo apt-get install python3-pip
+sudo apt-get install python3-pil
+sudo apt-get install python3-numpy
+sudo pip3 install spidev
+
+Install function library (python2):
+
+sudo apt-get update
+sudo apt-get install python-pip
+sudo apt-get install python-pil
+sudo apt-get install python-numpy
+sudo pip install spidev
+
+Install gpiozero library (it is installed in the system by default, if not, you can install it by following the commands below)
+
+sudo apt-get update
+# python3
+sudo apt install python3-gpiozero
+# python2
+sudo apt install python-gpiozero
+
+Download the demo via GitHub (You can skip this step if you have downloaded it.):
+
+git clone https://github.com/waveshare/e-Paper.git
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Download the demo (You can skip this step if you have downloaded it.):
+
+wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
+unzip E-Paper_code.zip -d e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Alternate decompression method:
+
+sudo apt-get install p7zip-full
+7z x E-Paper_code.zip -O./e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Run the demo:
+
+# Make sure it's in e-Paper/RaspberryPi_JetsonNano/
+cd python/examples/
+python3 epd_7in5_V2_test.py
+
+Working With Arduino
+
+Hardware Connection
+
+Use an 8PIN cable to connect, please refer to the pin correspondence table below:
+
+Connect To Arduino
+
+| e-Paper
+| Arduino UNO
+| Mega2560
+
+| VCC
+| 5V
+| 5V
+
+| GND
+| GND
+| GND
+
+| DIN
+| D11
+| D51
+
+| CLK
+| D13
+| D52
+
+| CS
+| D10
+| D10
+
+| DC
+| D9
+| D9
+
+| RST
+| D8
+| D8
+
+| BUSY
+| D7
+| D7
+
+| PWR
+| D6
+| D6
+
+Install IDE
+
+[https://www.waveshare.com/wiki/Arduino_ide_download] Arduino IDE Windows Install Guide
+
+Run The Demo
+
+Download the demo  [https://files.waveshare.com/upload/7/71/E-Paper_code.zip] here or in Resources, unzip it to the "E-Paper_code" directory, and you can see the following content:
+
+Open the test demo: E-Paper_code\Arduino\epd7in5_V2\epd7in5_V2.ino.
+
+Select the corresponding Board and Port in the Tools in the Arduino IDE.
+
+Finally, click upload, the upload is successful as follows (Arduino 1.8.13).
+
+Working With Jetson Nano
+
+Hardware Connection
+
+The 40PIN pin of Jetson Nano is compatible with the 40PIN pin of Raspberry Pi and provides a Jetson.GPIO library with the same API as the RPI.GPIO library of Raspberry Pi, so the serial number connected here is the same as that of Raspberry Pi. The module can be directly inserted into the 40Pin headers of the Jetson Nano when using the 40PIN interface.
+
+If you choose to connect with an 8PIN cable, please refer to the pin correspondence table below:
+
+Connect to Jetson nano
+
+| e-Paper
+
+| Jetson Nano Developer Kit
+
+| BCM2835
+
+| Board
+
+| VCC
+| 3.3V
+| 3.3V
+
+| GND
+| GND
+| GND
+
+| DIN
+| 10 (SPI0_MOSI)
+| 19
+
+| CLK
+| 11 (SPI0_SCK)
+| 23
+
+| CS
+| 8 (SPI0_CS0)
+| 24
+
+| DC
+| 25
+| 22
+
+| RST
+| 17
+| 11
+
+| BUSY
+| 24
+| 18
+
+| PWR
+| 18
+| 12
+
+C
+
+Download the demo via GitHub (you can skip this step if you have downloaded it.):
+
+git clone https://github.com/waveshare/e-Paper.git
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Download the demo: (you can skip this step if you have downloaded it.):
+
+wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
+unzip E-Paper_code.zip -d e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Alternate decompression method:
+
+sudo apt-get install p7zip-full
+7z x E-Paper_code.zip -O./e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Compile the demo (Note: JETSON is to specify the device as jetson nano, and RPI is not specified by default. -j4 is to compile by 4 threads, and the number can be changed by yourself. "EPD=epd7in5V2" is to specify a macro definition, and "epd7in5V2" corresponds to the test demo in the main function.):
+
+# Now at e-Paper/RaspberryPi_JetsonNano
+cd c
+sudo make clean
+sudo make JETSON -j4 EPD=epd7in5V2
+
+Run the demo:
+
+sudo ./epd
+
+Python
+
+Install function library:
+
+sudo apt-get update
+sudo apt-get install python3-numpy
+sudo apt-get install python3-pip
+sudo pip3 install Jetson.GPIO
+
+Download the demo via GitHub (you can skip this step if you have downloaded it.):
+
+git clone https://github.com/waveshare/e-Paper.git
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Download the demo (you can skip this step if you have downloaded it.):
+
+wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
+unzip E-Paper_code.zip -d e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Alternate decompression method:
+
+sudo apt-get install p7zip-full
+7z x E-Paper_code.zip -O./e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Run the demo:
+
+# Make sure it's in e-Paper/RaspberryPi_JetsonNano/
+cd python/examples/
+python3 epd_7in5_V2_test.py
+
+Working With RDK X3
+
+Hardware Connection
+
+When connecting the RDK X3, you can directly insert the board into the 40PIN pin header of the RDK X3, and pay attention to the correct pins.
+
+If you choose to connect with an 8PIN cable, please refer to the pin correspondence table below:
+
+Connect to RDK X3
+
+| e-Paper
+
+| RDK X3
+
+| BCM
+
+| Board
+
+| VCC
+| 3.3V
+| 3.3V
+
+| GND
+| GND
+| GND
+
+| DIN
+| MOSI
+| 19
+
+| CLK
+| SCLK
+| 23
+
+| CS
+| CE0
+| 24
+
+| DC
+| 25
+| 22
+
+| RST
+| 17
+| 11
+
+| BUSY
+| 24
+| 18
+
+| PWR
+| 18
+| 12
+
+Enable SPI
+
+SPI is enabled by default. If you have disabled it, you can enable it by following the steps below.
+
+Enter the command: sudo srpi-config.
+
+Python
+
+The corresponding library has been installed in the function. If you uninstall it accidentally, please use the following command to install it.
+
+sudo apt-get update
+sudo apt-get install python-pip
+sudo apt-get install python-pil
+sudo apt-get install python-numpy
+sudo pip install Hobot.GPIO
+sudo pip install spidev
+
+Download the demo via GitHub (skip this step if you have downloaded it):
+
+git clone https://github.com/waveshare/e-Paper.git
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Download the demo (skip this step if you have downloaded it):
+
+wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
+unzip E-Paper_code.zip -d e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Alternate decompression method:
+
+sudo apt-get install p7zip-full
+7z x E-Paper_code.zip -O./e-Paper
+cd e-Paper/RaspberryPi_JetsonNano/
+
+Run the demo:
+
+# Make sure you are in e-Paper/RaspberryPi_JetsonNano/
+cd python/examples/
+python3 epd_7in5_V2_test.py
+
+Working With STM32
+
+Hardware Connection
+
+Use an 8PIN cable to connect, please refer to the pin correspondence table below:
+
+Connect to STM32
+
+| e-Paper
+| STM32
+
+| VCC
+| 3.3V
+
+| GND
+| GND
+
+| DIN
+| PA7
+
+| CLK
+| PA5
+
+| CS
+| PA4
+
+| DC
+| PA2
+
+| RST
+| PA1
+
+| BUSY
+| PA3
+
+| PWR
+| PA6
+
+Run The Demo
+
+[https://files.waveshare.com/upload/7/71/E-Paper_code.zip] Click to download the demo, and then unzip it into the E-Paper_code directory to see the following content.
+
+Use Keil to open epd-demo.uvprojx in the E-Paper_code\STM32\STM32-F103ZET6\MDK-ARM directory.
+
+Open Keil's compilation toolbar (usually already open).
+
+Select the EPD_7in5_V2_test at the location shown in the picture.
+
+Click to compile.
+
+Make sure the appropriate programmer is connected, then click LOAD to download the demo to the microcontroller.
+
+ESP32/8266
+
+ESP32
+
+There is a lot of content, please click  [https://www.waveshare.com/wiki/E-Paper_ESP32_Driver_Board] here to view.
+
+ESP8266
+
+There is a lot of content, please click  [https://www.waveshare.com/wiki/E-Paper_ESP8266_Driver_Board] here to view.
+
+Resources
+
+Documentation
+
+[https://files.waveshare.com/upload/6/60/7.5inch_e-Paper_V2_Specification.pdf] 7.5inch e-Paper V2 Specification (current version)
+
+[https://files.waveshare.com/upload/b/b6/7.5inch-e-paper-specification.pdf] 7.5inch-e-paper V1 Specification
+
+[https://files.waveshare.com/upload/8/87/E-Paper-Driver-HAT-Schematic.pdf] Schematic
+
+Demo code
+
+[https://files.waveshare.com/wiki/common/E-Paper_code.zip] Demo (zip file)
+
+[https://github.com/waveshare/e-Paper] GitHub
+
+Development Resources
+
+E-Paper Floyd-Steinberg
+
+E-Paper API Analysis
+
+[https://files.waveshare.com/upload/c/c6/Zimo221.7z] Zimo221.7z
+
+e-Paper Font Library Tutorial
+
+[https://files.waveshare.com/upload/3/36/Image2Lcd.7z] Image2Lcd.7z
+
+[https://www.waveshare.com/wiki/Image2Lcd_Image_Bitmap_Conversion] Image2Lcd Image Bitmap Conversion
+
+[https://www.waveshare.com/wiki/Template:2.13inch_e-Paper_HAT%2B_Pwn] pwnagotchi Usage
+
+Third Parties Example
+
+[https://www.tindie.com/products/aceinnolab/inkycal-create-your-own-e-paper-dashboard/] e-Paper Dashboard
+
+[https://github.com/aceisace/Inkycal] Inkycal Project
+
+This is the Inkycal project for reference.
+
+Related Links
+
+[https://www.waveshare.com/wiki/Raspberry_Pi_Documentation] Raspberry Pi Documentation
+
+[https://github.com/aceinnolab/Inkycal] e-Paper Dashboard
+
+[https://github.com/Quectel-Pi/demo-inkscreen-reader] Quectel-Pi e-Paper Reader
+
+[https://github.com/mmolhoek/papertrail] GPS Tracker
+
+[https://github.com/tuya/TuyaOpen] TuyaOpen e-Paper Driver
+
+Project Resources
+
+This section features third - party project resources. We merely provide links and bear no responsibility for content updates or maintenance. Thank you for your understanding.
+
+AKZ Dev - an E-Ink Calendar with a Raspberry Pi
+
+YouTube:  [https://www.youtube.com/watch?v=58QWxoFvtJY] https://www.youtube.com/watch?v=58QWxoFvtJY
+
+GitHub:  [https://github.com/fatihak/InkyPi] https://github.com/fatihak/InkyPi
+
+Doctor Volt - Building the TRMNL E‑Ink Display
+
+YouTube:  [https://www.youtube.com/watch?v=LBE6dzJbHiM] https://www.youtube.com/watch?v=LBE6dzJbHiM
+
+GitHub:  [https://github.com/usetrmnl/trmnl-firmware] https://github.com/usetrmnl/trmnl-firmware
+
+Doctor Volt - Getting Started With E-Paper
+
+YouTube:  [https://www.youtube.com/watch?v=2SUT52lFQJw] https://www.youtube.com/watch?v=2SUT52lFQJw
+
+GitHub:  [https://github.com/ZinggJM/GxEPD2] https://github.com/ZinggJM/GxEPD2
+
+Florent Berrez - I built a calm dashboard for a 7.5" Waveshare panel
+
+Reddit:  [https://www.reddit.com/r/eink/comments/1tybe9l/i_built_a_calm_dashboard_for_a_75_waveshare_panel/] https://www.reddit.com/r/eink/comments/1tybe9l/i_built_a_calm_dashboard_for_a_75_waveshare_panel/
+
+GitHub:  [https://github.com/fberrez/quietdash.com] https://github.com/fberrez/quietdash.com
+
+Simple-YU-268 - NSW bus/lightrail stop e-Paper arrival board for Raspberry Pi + Waveshare 7.5" HAT
+
+GitHub:  [https://github.com/Simple-YU-268/nsw-bus-epaper] https://github.com/Simple-YU-268/nsw-bus-epaper
+
+kapoorankush - A literary clock for Raspberry Pi + e-Paper — tells the time with 4,800+ book quotes, one for every minute of the day.
+
+GitHub:  [https://github.com/kapoorankush/litclock] https://github.com/kapoorankush/litclock
+
+FAQ
+
+Question about Software
+
+Question: The Raspberry Pi runs the Python program and the following occurs?
+
+Answer:
+
+Enter the command: ls /dev/spi*.
+
+The result may appear as shown in the figure.
+
+This is because the SPI interface is occupied in the /boot/config.txt file.
+
+Steps:
+
+Delete the occupation of spi0-0 in the /boot/config.txt file.
+
+Modify the location shown in the picture in the /e-Paper/RaspberryPi_JetsonNano/lib/waveshare_epd/epdconfig.py file and change it to 0,1.
+
+{{{5}}}
+
+Question: How to use custom fonts?
+
+Answer:
+
+Currently, we do not provide additional font files. You may refer to the custom font generator shared by users to generate and test font files.
+
+Note: This tool is not officially maintained and is for learning purposes only.
+
+[https://github.com/ayoy/fontedit] https://github.com/ayoy/fontedit
+
+{{{5}}}
+
+Question: STM32 drives the e-Paper screen, the MDK compilation display space is not enough?
+
+Answer:
+
+Our demo uses STM32f103ZET6. If the customer modifies other models in MDK, such as STM32F103RBT6, the ram space becomes smaller, and the stack size and heap size in the startup file need to be modified on the original basis.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: After multiple positions are refreshed partially, the font is lighter after refreshed several times?
+
+Answer:
+
+In this case, the customer needs to reduce the position of the partial refresh and clear the screen after 5 rounds of partial refresh (increasing the voltage of VCOM can improve the color, but it will increase the afterimage).
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: When the e-Paper screen is in deep sleep mode, there will be a problem that the screen refresh will not be clean when it wakes up for the first time. How can I solve it?
+
+Answer:
+
+The process of re-awakening the e-Paper screen is the process of re-powering. Therefore, when the EPD wakes up, the screen must be cleared first, to avoid the afterimage phenomenon to the greatest extent.
+
+{{{5}}}
+
+Question: When testing the demo, it has been stuck in e-Paper busy?
+
+Answer:
+
+It may be caused by the unsuccessful SPI driver.
+
+1. First check whether the wiring is correct.
+
+2. Check whether the SPI is turned on and whether the parameters are configured correctly (SPI baud rate, SPI mode and other parameters).
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: Why can't the image be displayed when full refresh after partial refresh?
+
+Answer:
+
+The full refresh initialization function needs to be added when the e-Paper screen is switched from partial refresh to full refresh.
+
+{{{5}}}
+
+Question: Why is the printing information normal when running a Python program, but the e-Paper screen does not respond?
+
+Answer:
+
+It may be a demo based on the BCM2835 library that has run the C language before. At this time, you need to restart the Raspberry Pi and then run the Python demo.
+
+{{{5}}}
+
+Question: ImportError: No module named Image?
+
+Answer:
+
+Install the imaging library using the command "sudo apt-get install python-imaging".
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: When to use Data Start Transmission 1 and when to use Data Start Transmission 2? In KW mode, what is "OLD" data and what is "NEW" data?
+
+Answer:
+
+If it is a three-color screen, when transmitting B/W data, use Data Start Transmission 1, when transmitting RED data, use Data Start Transmission 2.
+
+When Data Start Transmission 1, the last data is sent, that is, the so-called "OLD" data, and 0x00 is directly sent in the program. When Data Start Transmission 2, the data that needs to be refreshed is sent, that is, the so-called "NEW" data.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: The e-Paper display is too dark or too light?
+
+Answer:
+
+You can adjust the value of Vcom in the program to change the display contrast, and the screen improvement effect with partial refreshing is particularly obvious.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: e-Paper shows black border?
+
+Answer:
+
+The border display color can be set through the Border Waveform Control register or the VCOM AND DATA INTERVAL SETTING register.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question about Hardware
+
+Question: Can Arduino 5V drive the e-Paper screen?
+
+Answer:
+
+Yes, now there is a level conversion chip onboard, supporting a 5V drive.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What should be paid attention to when designing the driver board?
+
+Answer:
+
+The rated input voltage of the e-Paper screen is 2.3~3.6V. If it is a 5V system, level conversion is required. In addition, the voltage should not be lower than 2.5V, so as not to affect the display effect of the e-Paper screen.
+
+Device selection can use the model in the schematic diagram we provide or choose according to the data sheet.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: Can I use analog SPI?
+
+Answer:
+
+Yes, pay attention to the correct timing.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: Why is the BUSY pin always busy?
+
+Answer:
+
+Check if SPI communication is normal.
+
+Confirm whether the BUSY pin is normally initialized to input mode.
+
+It may be that there is no normal reset, try to shorten the duration of the low level during reset (because the power-off switch is added to the drive circuit, the reset low level is too long, which will cause the drive board to power off and cause the reset to fail).
+
+If the busy function sends the 0x71 command, you can try to comment it out.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What is the specification of the screen cable interface?
+
+Answer:
+
+1.64inch, 2.36inch, 3inch, 0.5mm pitch, 26Pin.
+
+1.02inch, 0.5mm pitch, 30Pin.
+
+4.37inch, 7.3inch, 0.5mm pitch, 50Pin.
+
+The rest (non-parallel ports) are 0.5mm pitch, 24Pin.
+
+{{{5}}}
+
+Question: What type of connector does the e-Paper screen use?
+
+Answer:
+
+Cable socket 0.5-XXpin rear-flip 2.0H (FPC connector).
+
+{{{5}}}
+
+Question about Screen
+
+Question: What is the usage environment of the e-Paper screen?
+
+Answer:
+
+【Working conditions】Temperature range: 0~50°C (Seven-color screen: 15~35°C); Humidity range: 35%~65%RH.
+
+【Storage conditions】Temperature range: below 30°C; Humidity range: below 55%RH; Maximum storage time: 6 months.
+
+【Transportation conditions】Temperature range: -25~70°C; Maximum transportation time: 10 days.
+
+【After unpacking】Temperature range: 20°C±5°C; Humidity range: 50±5%RH; Maximum storage time: Assemble within 72 hours.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: Precautions for e-Paper screen refresh.
+
+Answer:
+
+Refresh mode
+
+Full refresh: The e-paper screen will flicker several times during the refresh process (the number of flickers depends on the refresh time), and the flicker is to remove the afterimage to achieve the best display effect.
+
+Partial refresh: The e-paper screen has no flickering effect during the refresh process. Users who use the partial brushing function note that after refreshing several times, a full refresh operation should be performed to remove the residual image, otherwise the residual image problem will become more and more serious, or even damage the screen (currently only some black and white e-paper screens support partial refreshing, please refer to product page description).
+
+Refresh rate
+
+During use, it is recommended that customers set the refresh interval of the e-paper screen to at least 180 seconds (except for products that support the local brush function).
+
+During the standby process (that is, after the refresh operation), it is recommended that the customer set the e-paper screen to sleep mode, or power off (the power supply part of the e-paper screen can be disconnected with an analog switch) to reduce power consumption and prolong the life of the e-paper screen. (If some e-paper screens are powered on for a long time, the screen will be damaged beyond repair.)
+
+During the use of the multi-color e-paper screen, it is recommended that customers update the display screen at least once every 24 hours. (If the screen keeps the same picture for a long time, the screen will burn and it is difficult to repair.)
+
+Use Environment
+
+The e-Paper displays are recommended for indoor use and not for outdoor use.
+
+If the usage scenario is outdoors, we do not guarantee the display effect. If the e-Paper screen is damaged due to outdoor use, we do not provide warranty service.
+
+Here are some protective measures for outdoor use, but we do not guarantee that the e-Paper screen will function normally even after taking these precautions:
+
+Avoid exposing the e-Paper screen to direct sunlight and ensure UV protection. Prolonged exposure to strong light can dry out the charged particles, rendering them inactive and unable to refresh, which is irreversible.
+
+Completely cover the white glue part of the e-Paper screen's connection ribbon with 3M tape. Complete coverage and no coverage show different effects under UV light.
+
+Place the e-Paper screen in relatively shaded areas, such as under trees or the shadow of eaves.
+
+When designing e-Paper screen products, customers should ensure that the usage environment meets the requirements of the e-Paper screen.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What is the refresh rate/lifetime of the e-paper screen?
+
+Answer:
+
+Ideally, with normal use, it can be refreshed 1,000,000 times (1 million times).
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: After using for a period of time, the screen refresh (full refresh) has a serious afterimage problem that cannot be repaired?
+
+Answer:
+
+Power on the development board for a long time, after each refresh operation, it is recommended to set the screen to sleep mode or directly power off processing, otherwise, the screen may burn out when the screen is in a high voltage state for a long time.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: After the e-Paper screen enters deep sleep mode, can it be refreshed again?
+
+Answer:
+
+Yes, but you need to re-initialize the e-Paper with software.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: Why is the image displayed offset?
+
+Answer:
+
+Maybe the SPI rate is too high, resulting in data loss, try to reduce the SPI rate.
+
+Insufficient or unstable power supply leads to data loss.
+
+The data cable is too long, causing data loss, the extension cable should not exceed 20cm.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What is the waveform file of the e-Paper screen and what does it do?
+
+Answer:
+
+The display gray scale of electrophoretic electronic paper is determined by the spatial position of the particles in the Microcapsule or Microcup. The electrophoresis phenomenon occurs between black particles and white particles under the action of voltage. This voltage sequence that promotes the electrophoretic movement of the particles is the driving waveform of the electronic paper. The driving waveform is the core part of the electronic paper display, and the optimization of the driving waveform will directly affect the display effect of the display. The driving waveform file is used to describe the parameters formed by the voltage sequence that promotes the electrophoretic movement of the particles, and it needs to be called regularly when the electronic paper is refreshed.
+
+For different batches of e-paper diaphragms, electrophoretic matrices require different voltage values ​​when driving the display due to materials, manufacturing processes, etc. The waveform of the e-paper screen is reflected in the relationship between grayscale, voltage, and temperature. Generally speaking, after each batch of electrophoresis matrix is ​​generated, there will be a corresponding waveform file in the form of a .wbf file. The film manufacturer will provide the waveform file and electrophoresis matrix to the manufacturer of the electronic paper screen, and then the manufacturer of the electronic paper screen integrates the protection board, substrate, and driver and then provides it to customers; if the waveform file does not correspond to the screen, it is likely that the display cannot be displayed or the display effect is unsatisfactory. Generally, the waveform file has OTP built into the driver IC of the ink screen when leaving the factory, and some programs we provide also called external waveform files to drive the e-paper screen.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question:  What do LUT and OTP stand for?
+
+Answer:
+
+LUT is the abbreviation of LOOK UP TABLE, and OTP is the abbreviation of ONE TIME PROGRAM. The original intention of LUT is to load waveform files, and the waveform files are divided into OTP and REGISTER. Among them, OTP is the built-in waveform storage method, and REGISTER is the external waveform storage method.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What is the process of refreshing e-Paper partially?
+
+Answer:
+
+There are mainly two types of e-Paper screens.
+
+One is to refresh the background image first.
+
+The other is to alternately refresh old data and new data.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: How to refresh in different positions at the same time?
+
+Answer:
+
+Simultaneous refreshing in different positions needs to be operated in the program design, that is, first refreshing the data of different positions into the electronic paper IC, and finally doing the Update/TurnOnDisplay uniformly.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question:  Are bare screens shipped with a film?
+
+Answer:
+
+With film.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question:  Does e-Paper have a built-in temperature sensor?
+
+Answer:
+
+At present, all screens have built-in temperature sensors, and you can use IIC pin external LM75 temperature sensor.
+
+{{{3}}}
+{{{4}}}
+
+{{{5}}}
+
+Question: What is the pitch of the 8-pin connectors on the e-Paper display hats?
+
+Answer:
+
+The pitch of the 8-pin connectors on the e-Paper display hats is 0.1 inch (2.54 mm).
+
+{{{5}}}
+
+Support
+
+Technical Support
+
+If you need technical support or have any feedback/review, please click the Submit Now button to submit a ticket, Our support team will check and reply to you within 1 to 2 working days. Please be patient as we make every effort to help you to resolve the issue.
+
+Working Time: 9 AM - 6 PM GMT+8 (Monday to Friday)
+
+[https://service.waveshare.com/] Submit Now

@@ -17,6 +17,7 @@ ffmpeg/ffprobe
 *.pptm
 *.xml
 *.txt
+!docs/hardware/vendor/*.txt
 test.py
 !requirements*.txt
 .aws-sam

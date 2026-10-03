@@ -1,5 +1,15 @@
 # Very Slow Movie Player
 
+## Hardware
+
+This project uses a **Waveshare 7.5-inch e-Paper HAT V2 kit**, with an
+**800 × 480 monochrome panel** and the **e-Paper Driver HAT** for Raspberry Pi.
+The November 2020 purchase is recorded in the
+[hardware reference](docs/hardware/waveshare-7in5-v2.md), alongside local copies
+of the manufacturer manuals, panel specification, and HAT schematic. Start
+there for hardware discussions; the adapter's physical PCB revision has not
+been inspected.
+
 ## Media source
 
 `VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
