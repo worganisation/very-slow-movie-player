@@ -1,5 +1,8 @@
 # VSMP e-paper hardware reference
 
+For the confirmed Raspberry Pi model and the purchased COB strip's proposed
+power/dimming arrangement, see [Pi and lighting notes](pi-and-lighting.md).
+
 The Amazon order placed **16 November 2020** identifies a **Waveshare 7.5-inch
 e-Paper Display HAT Module V2 Kit**, monochrome, **800 × 480**, SPI, public
 [ASIN B075R4QY3L](https://www.amazon.co.uk/dp/B075R4QY3L). The current
@@ -7,6 +10,13 @@ ordered-item link is useful for identifying the purchase, but its title may
 have changed since 2020. The physical panel's back label, PCB revision, and
 controller markings have **not** been inspected, so the exact hardware revision
 remains unconfirmed. No private order details are stored here.
+
+The ordered kit includes the panel and the Raspberry Pi **Waveshare e-Paper
+Driver HAT** adapter. **V2 describes the display family, not a verified HAT
+PCB revision.** The order was checked again in Firefox on **3 October 2026**:
+the ordered-item title still identifies the V2 kit and the same ASIN. The
+public listing can change; use this purchase record and the repository's
+`epd7in5_v2.py` driver together when identifying the installed display family.
 
 [Waveshare's 7.5-inch e-Paper HAT manual](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual)
 distinguishes the 640 × 384 V1 from the 800 × 480 monochrome V2. It recommends
@@ -16,6 +26,38 @@ family, subject to checking the panel itself. VSMP's driver is vendor-derived
 and locally modified; it is not a verbatim copy of either current program.
 
 ## Manufacturer reference index
+
+### Local copies for future hardware discussions
+
+The following manufacturer files were retrieved on **3 October 2026**. The
+PDFs are stored unchanged, with searchable text extracts beside them. The
+manual text snapshot preserves the wiki article's text and links, including
+its version-selection guidance; images are omitted. Use the PDFs or live wiki
+for illustrations. Manufacturer copyright and attribution remain with
+Waveshare; these files are reference material, not project-authored manuals.
+
+| Local reference | Source and scope |
+| --- | --- |
+| [7.5-inch HAT manual, text snapshot](vendor/waveshare-7in5-hat-manual.txt) | [Waveshare manual](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual), wiki revision `110993`; includes the pre/post-September 2023 V2 distinction. |
+| [V2 panel specification, PDF](vendor/waveshare-7in5-v2-specification.pdf) / [text](vendor/waveshare-7in5-v2-specification.txt) | [Manufacturer download](https://files.waveshare.com/upload/6/60/7.5inch_e-Paper_V2_Specification.pdf), revision 2.0, 28 June 2019, 52 pages. |
+| [e-Paper Driver HAT user manual, PDF](vendor/waveshare-e-paper-driver-hat-manual.pdf) / [text](vendor/waveshare-e-paper-driver-hat-manual.txt) | [Manufacturer download](https://files.waveshare.com/upload/8/8e/E-paper-driver-hat-user-manual.pdf), 14 pages; covers the adapter family and several display sizes. |
+| [Driver HAT V2.2 schematic, PDF](vendor/waveshare-e-paper-driver-hat-v2.2-schematic.pdf) / [text](vendor/waveshare-e-paper-driver-hat-v2.2-schematic.txt) | [Manufacturer download](https://files.waveshare.com/upload/8/87/E-Paper-Driver-HAT-Schematic.pdf), one sheet marked **V2.2**. This identifies the document, not the installed PCB. |
+
+[SHA256SUMS](vendor/SHA256SUMS) records every local reference file. Verify
+the copies from the repository root with:
+
+```sh
+(cd docs/hardware/vendor && shasum -a 256 -c SHA256SUMS)
+```
+
+The downloaded panel specification and HAT schematic still match the hashes
+recorded below on 27 September 2026. The HAT manual and schematic are general
+adapter references; compare their revision-specific circuitry and connectors
+against the physical board before applying them. The current Driver HAT wiki
+also documents Rev2.3 with a separate PWR pin; this is not evidence that the
+2020 kit contains that revision.
+
+### Upstream references and historical drivers
 
 | Reference | Use | Reproducible identity |
 | --- | --- | --- |
