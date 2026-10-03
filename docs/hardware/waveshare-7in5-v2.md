@@ -1,5 +1,8 @@
 # VSMP e-paper hardware reference
 
+For the confirmed Raspberry Pi model and the purchased COB strip's proposed
+power/dimming arrangement, see [Pi and lighting notes](pi-and-lighting.md).
+
 The Amazon order placed **16 November 2020** identifies a **Waveshare 7.5-inch
 e-Paper Display HAT Module V2 Kit**, monochrome, **800 × 480**, SPI, public
 [ASIN B075R4QY3L](https://www.amazon.co.uk/dp/B075R4QY3L). The current

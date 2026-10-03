@@ -10,6 +10,10 @@ of the manufacturer manuals, panel specification, and HAT schematic. Start
 there for hardware discussions; the adapter's physical PCB revision has not
 been inspected.
 
+The host is a Raspberry Pi 4 Model B Rev 1.4, confirmed over SSH. The
+[Pi and lighting notes](docs/hardware/pi-and-lighting.md) record this inspection
+and the proposed power budget and PWM dimmer for the purchased 5 V COB strip.
+
 ## Media source
 
 `VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
