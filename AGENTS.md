@@ -2,7 +2,8 @@
 
 For display, Raspberry Pi HAT, wiring, refresh, or hardware questions, read
 `docs/hardware/waveshare-7in5-v2.md` first. It records the purchased kit and
-indexes the local manufacturer manuals, panel specification, and HAT schematic
+indexes the local manufacturer manuals, panel specification, mechanical drawings,
+and HAT schematic
 under `docs/hardware/vendor/`. Search the adjacent text copies before fetching
 the same documents again; consult the PDFs for diagrams and exact layout.
 

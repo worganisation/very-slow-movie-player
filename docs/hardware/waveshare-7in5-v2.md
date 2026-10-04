@@ -34,7 +34,9 @@ PDFs are stored unchanged, with searchable text extracts beside them. The
 manual text snapshot preserves the wiki article's text and links, including
 its version-selection guidance; images are omitted. Use the PDFs or live wiki
 for illustrations. Manufacturer copyright and attribution remain with
-Waveshare; these files are reference material, not project-authored manuals.
+the respective manufacturers; these files are reference material, not
+project-authored manuals. The additional mechanical drawings below were
+retrieved on **4 October 2026**, unchanged from their manufacturer URLs.
 
 | Local reference | Source and scope |
 | --- | --- |
@@ -42,6 +44,30 @@ Waveshare; these files are reference material, not project-authored manuals.
 | [V2 panel specification, PDF](vendor/waveshare-7in5-v2-specification.pdf) / [text](vendor/waveshare-7in5-v2-specification.txt) | [Manufacturer download](https://files.waveshare.com/upload/6/60/7.5inch_e-Paper_V2_Specification.pdf), revision 2.0, 28 June 2019, 52 pages. |
 | [e-Paper Driver HAT user manual, PDF](vendor/waveshare-e-paper-driver-hat-manual.pdf) / [text](vendor/waveshare-e-paper-driver-hat-manual.txt) | [Manufacturer download](https://files.waveshare.com/upload/8/8e/E-paper-driver-hat-user-manual.pdf), 14 pages; covers the adapter family and several display sizes. |
 | [Driver HAT V2.2 schematic, PDF](vendor/waveshare-e-paper-driver-hat-v2.2-schematic.pdf) / [text](vendor/waveshare-e-paper-driver-hat-v2.2-schematic.txt) | [Manufacturer download](https://files.waveshare.com/upload/8/87/E-Paper-Driver-HAT-Schematic.pdf), one sheet marked **V2.2**. This identifies the document, not the installed PCB. |
+| [Raspberry Pi 4B mechanical drawing, PDF](vendor/raspberry-pi-4b-mechanical-drawing.pdf) / [text](vendor/raspberry-pi-4b-mechanical-drawing.txt) | [Official manufacturer download](https://pip-assets.raspberrypi.com/categories/545-raspberry-pi-4-model-b/documents/RP-008343-DS-1-raspberry-pi-4-mechanical-drawing.pdf), one sheet showing board outline, hole centres, connectors, and component heights. |
+| [Driver HAT Rev2.3 mechanical drawing, JPEG](vendor/waveshare-e-paper-driver-hat-rev2.3-mechanical-drawing.jpg) | [Manufacturer image](https://www.waveshare.com/img/devkit/LCD/e-Paper-Driver-HAT/e-Paper-Driver-HAT-details-size.jpg), visibly marked **Rev2.3**; not a verified drawing of the installed 2020 board. |
+
+### Mechanical drawings for frame design
+
+Use the original files above for geometry; searchable text extracts do not
+preserve the positioning of dimension labels.
+
+- **Panel:** page **5** of the local V2 specification, section **1.4 Mechanical
+  Drawing of EPD module**, includes the front/rear views, active area, thickness,
+  and projecting ribbon cable. The outline is **170.2 ± 0.2 × 111.2 ± 0.2 mm**;
+  the active area is **163.2 ± 0.1 × 97.92 ± 0.1 mm** and thickness is
+  **1.18 ± 0.1 mm**. Follow the dimensioned active-area placement rather than
+  assuming it is centred.
+- **Pi:** the mechanical drawing shows an **85 × 56 mm** PCB outline and
+  **58 × 49 mm** mounting-hole centre spacing. Its component heights and
+  connector projections also matter for the frame's rear cavity.
+- **HAT:** the downloaded **Rev2.3** drawing shows an outline of
+  **65 × 32.2 mm**, plus the separate adapter board at **31.75 × 17.5 mm**.
+  The saved HAT manual instead lists **65 × 30.2 mm**. These references disagree
+  on the HAT height, and the image depicts a later revision than the purchased
+  kit. Measure the actual board outline, mounting holes, and component height
+  before finalising its pocket or mounting posts; do not treat the newer image
+  as an exact mechanical drawing of the installed board.
 
 [SHA256SUMS](vendor/SHA256SUMS) records every local reference file. Verify
 the copies from the repository root with:
