@@ -42,6 +42,20 @@ class CaptionTests(unittest.TestCase):
         self.assertEqual(caption_at(cues, 2), "")
         self.assertEqual(caption_at(cues, 3.5, offset=0.5), "Second line")
 
+    def test_vtt_space_only_payload_line_stays_in_cue(self) -> None:
+        """YouTube's space-only payload lines do not separate cue blocks."""
+        cues = normalize_subtitles(
+            "WEBVTT\nKind: captions\nLanguage: en\n\n"
+            "00:00:03.679 --> 00:00:08.709 align:start position:0%\n"
+            " \nyou're<00:00:03.919><c> a wizard</c>\n\n"
+            "00:00:08.719 --> 00:00:13.230\nHarry\n \n\n",
+            "vtt",
+            rolling=True,
+        )
+        self.assertEqual([cue.text for cue in cues], ["you're a wizard", "Harry"])
+        self.assertAlmostEqual(cues[0].start, 3.679)
+        self.assertAlmostEqual(cues[1].end, 13.230)
+
     def test_vtt_rolling_caption_dedup(self) -> None:
         """Only verified overlapping rolling cues remove repeated prefix words."""
         cues = normalize_subtitles(

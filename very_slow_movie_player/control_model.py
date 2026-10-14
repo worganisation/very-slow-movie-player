@@ -11,6 +11,13 @@ from pydantic import BaseModel, Field, field_validator
 from settings import SETTINGS
 
 CONTROL_NAMES = frozenset({
+    "library_id",
+    "captions_enabled",
+    "caption_style",
+    "caption_background",
+    "caption_font",
+    "caption_font_size",
+    "caption_offset",
     "source",
     "playback_enabled",
     "video_interval",
@@ -28,7 +35,7 @@ BUTTON_NAMES = frozenset({"next", "redisplay", "restart_video"})
 class PlaybackControls(BaseModel):
     """Only non-secret settings exposed to Home Assistant."""
 
-    source: Literal["local", "immich"]
+    source: Literal["local", "immich", "library"]
     playback_enabled: bool
     video_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
     photo_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
@@ -37,6 +44,13 @@ class PlaybackControls(BaseModel):
     video_path: Path
     album: UUID
     media_type: Literal["photos", "videos", "both"]
+    library_id: str = "none"
+    captions_enabled: bool = True
+    caption_style: Literal["margin", "overlay"] = "margin"
+    caption_background: Literal["light", "dark"] = "light"
+    caption_font: Literal["serif", "sans"] = "serif"
+    caption_font_size: Annotated[int, Field(ge=16, le=40)] = 26
+    caption_offset: Annotated[float, Field(ge=-60, le=60, allow_inf_nan=False)] = 0
     always_restart_videos: bool
 
     @field_validator("video_path")
@@ -54,6 +68,12 @@ class PlaybackControls(BaseModel):
         """Construct complete defaults from eagerly validated environment settings."""
         return cls(
             source=SETTINGS.vsmp_source,
+            captions_enabled=SETTINGS.vsmp_captions_enabled,
+            caption_style=SETTINGS.vsmp_caption_style,
+            caption_background=SETTINGS.vsmp_caption_background,
+            caption_font=SETTINGS.vsmp_caption_font,
+            caption_font_size=SETTINGS.vsmp_caption_font_size,
+            caption_offset=SETTINGS.vsmp_caption_offset,
             playback_enabled=SETTINGS.vsmp_playback_enabled,
             video_interval=SETTINGS.vsmp_video_frame_delay_seconds,
             photo_interval=SETTINGS.vsmp_photo_frame_delay_seconds,

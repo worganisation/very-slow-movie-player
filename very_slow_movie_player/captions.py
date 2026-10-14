@@ -133,7 +133,7 @@ def _ass_cues(text: str) -> list[CaptionCue]:
 
 def _timed_block(block: str) -> CaptionCue | None:
     lines = block.splitlines()
-    if not lines or lines[0].startswith((
+    if not block.strip() or lines[0].startswith((
         "WEBVTT",
         "NOTE",
         "STYLE",
@@ -155,7 +155,7 @@ def _timed_block(block: str) -> CaptionCue | None:
 
 
 def _text_cues(text: str) -> list[CaptionCue]:
-    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").lstrip("\ufeff"))
+    blocks = re.split(r"\n{2,}", text.replace("\r\n", "\n").lstrip("\ufeff"))
     cues: list[CaptionCue] = []
     for block in blocks:
         cue = _timed_block(block)
