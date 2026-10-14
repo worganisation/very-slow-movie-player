@@ -51,7 +51,7 @@ jobs:
       - name: Publish semantic release
         env:
           GH_TOKEN: ${{ secrets.WORGARSIDE_DEV_TOKEN }}
-          GIT_COMMIT_AUTHOR: 'worgarside-dev <worgarside.dev@gmail.com>'
+          GIT_COMMIT_AUTHOR: worgarside-dev <worgarside.dev@gmail.com>
           FORCE_DEPLOYMENT: ${{ inputs.force-deployment }}
         run: |
           set -euo pipefail
