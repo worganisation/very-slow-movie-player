@@ -47,6 +47,67 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_original_image_discovery_and_reannouncement(self) -> None:
+        """Colour and panel previews survive reconnect and HA birth together."""
+        import json
+
+        from mqtt_controls import HAClient
+
+        client = HAClient(self.controls.CommandMailbox())
+        client.client = Mock()
+        client.client.is_connected.return_value = True
+        client.image(b"panel PNG")
+        client.original_image(b"colour PNG")
+
+        for _ in range(2):
+            client.client.publish.reset_mock()
+            client._announce()
+            publications = client.client.publish.call_args_list
+            topic = (
+                f"{client.discovery}/image/vsmp_{client.device_id}_original_image/config"
+            )
+            config = next(
+                json.loads(call.args[1]) for call in publications if call.args[0] == topic
+            )
+            self.assertEqual(config["icon"], "mdi:image")
+            self.assertEqual(config["content_type"], "image/png")
+            self.assertNotIn("availability_topic", config)
+            self.assertEqual(config["image_topic"], f"{client.root}/original_image")
+            client.client.publish.assert_any_call(
+                f"{client.root}/original_image", b"colour PNG", qos=1, retain=True
+            )
+            client.client.publish.assert_any_call(
+                f"{client.root}/displayed_frame", b"panel PNG", qos=1, retain=True
+            )
+
+    def test_original_image_keeps_colour_and_requires_successful_refresh(self) -> None:
+        """Caption rendering leaves the original intact; panel failures retain it."""
+        from io import BytesIO
+
+        path = self.root / "colour.png"
+        with Image.new("RGB", (800, 480), (220, 60, 20)) as source:
+            source.save(path)
+
+        mqtt = Mock()
+        with (
+            patch.object(self.main, "format_image", return_value=path),
+            patch.object(self.main, "DISPLAY") as panel,
+        ):
+            self.main.display_image(
+                path, 1.7, mqtt, caption="A caption", controls=self.defaults
+            )
+            with Image.open(BytesIO(mqtt.original_image.call_args.args[0])) as preview:
+                self.assertEqual(preview.mode, "RGB")
+                self.assertEqual(preview.size, (800, 480))
+                self.assertEqual(preview.getpixel((400, 460)), (220, 60, 20))
+
+            mqtt.reset_mock()
+            panel.display.side_effect = RuntimeError("panel failed")
+            with self.assertRaises(self.main.PanelRefreshError):
+                self.main.display_image(path, 1.7, mqtt, controls=self.defaults)
+            mqtt.image.assert_not_called()
+            mqtt.original_image.assert_not_called()
+
     def test_dithering_discovery_validation_and_persistence(self) -> None:
         """All advertised methods round-trip through validated durable controls."""
         import json

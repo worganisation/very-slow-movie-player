@@ -59,6 +59,7 @@ ENTITY_ICONS = {
     "next_refresh": "mdi:clock-outline",
     "last_error": "mdi:alert-circle-outline",
     "displayed_frame": "mdi:image-frame",
+    "original_image": "mdi:image",
 }
 
 
