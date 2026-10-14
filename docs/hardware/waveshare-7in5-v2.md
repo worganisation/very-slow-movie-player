@@ -11,12 +11,7 @@ have changed since 2020. The physical panel's back label, PCB revision, and
 controller markings have **not** been inspected, so the exact hardware revision
 remains unconfirmed. No private order details are stored here.
 
-The ordered kit includes the panel and the Raspberry Pi **Waveshare e-Paper
-Driver HAT** adapter. **V2 describes the display family, not a verified HAT
-PCB revision.** The order was checked again in Firefox on **3 October 2026**:
-the ordered-item title still identifies the V2 kit and the same ASIN. The
-public listing can change; use this purchase record and the repository's
-`epd7in5_v2.py` driver together when identifying the installed display family.
+The ordered kit includes the panel and the Raspberry Pi **Waveshare e-Paper Driver HAT** adapter. **V2 describes the display family, not a verified HAT PCB revision.** Use the purchase model and the repository's `epd7in5_v2.py` driver together when identifying the installed display family; the public listing can change.
 
 [Waveshare's 7.5-inch e-Paper HAT manual](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual)
 distinguishes the 640 × 384 V1 from the 800 × 480 monochrome V2. It recommends
@@ -29,14 +24,7 @@ and locally modified; it is not a verbatim copy of either current program.
 
 ### Local copies for future hardware discussions
 
-The following manufacturer files were retrieved on **3 October 2026**. The
-PDFs are stored unchanged, with searchable text extracts beside them. The
-manual text snapshot preserves the wiki article's text and links, including
-its version-selection guidance; images are omitted. Use the PDFs or live wiki
-for illustrations. Manufacturer copyright and attribution remain with
-the respective manufacturers; these files are reference material, not
-project-authored manuals. The additional mechanical drawings below were
-retrieved on **4 October 2026**, unchanged from their manufacturer URLs.
+The manufacturer PDFs are stored unchanged, with searchable text extracts beside them. The manual text snapshot preserves the wiki article's text and links, including its version-selection guidance; images are omitted. Use the PDFs or live wiki for illustrations. Manufacturer copyright and attribution remain with the respective manufacturers; these files are reference material, not project-authored manuals. The mechanical drawings are unchanged copies from their manufacturer URLs.
 
 | Local reference | Source and scope |
 | --- | --- |
@@ -76,12 +64,7 @@ the copies from the repository root with:
 (cd docs/hardware/vendor && shasum -a 256 -c SHA256SUMS)
 ```
 
-The downloaded panel specification and HAT schematic still match the hashes
-recorded below on 27 September 2026. The HAT manual and schematic are general
-adapter references; compare their revision-specific circuitry and connectors
-against the physical board before applying them. The current Driver HAT wiki
-also documents Rev2.3 with a separate PWR pin; this is not evidence that the
-2020 kit contains that revision.
+The HAT manual and schematic are general adapter references; compare their revision-specific circuitry and connectors against the physical board before applying them. The Driver HAT wiki also documents Rev2.3 with a separate PWR pin; this is not evidence that the 2020 kit contains that revision.
 
 ### Upstream references and historical drivers
 
