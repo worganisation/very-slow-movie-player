@@ -1,6 +1,6 @@
 [project]
 name = "very-slow-movie-player"
-version = "1.0.3"
+version = "1.1.0"
 description = ""
 authors = [{ name = "Will Garside", email = "worgarside@gmail.com" }]
 license = "MIT"

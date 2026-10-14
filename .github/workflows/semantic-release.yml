@@ -67,4 +67,19 @@ jobs:
             *) echo "::error::Invalid release component"; exit 1 ;;
           esac
 
-          "${command[@]}"
+          expected_version="$("${command[@]}" --print)"
+          EXPECTED_VERSION="$expected_version" python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+          from very_slow_movie_player import __version__
+
+          metadata = tomllib.loads(Path("pyproject.toml").read_text())
+          expected = os.environ["EXPECTED_VERSION"]
+          if metadata["project"]["version"] != expected or __version__ != expected:
+              raise SystemExit(
+                  f"Prepare version {expected} in a reviewed PR before releasing"
+              )
+          PY
+
+          "${command[@]}" --no-commit --no-changelog --skip-build

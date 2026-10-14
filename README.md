@@ -255,6 +255,8 @@ The release deployment workflow installs locked dependencies with uv.
 
 ## Release deployment
 
+Prepare the next version through a reviewed PR before running **Semantic Release**: update `project.version` in `pyproject.toml`, `very_slow_movie_player/__init__.py` and the root package version in `uv.lock`. The workflow checks that the committed version matches Semantic Release's expected version, then publishes the release tag without pushing a version commit to protected `main`. Release notes are published on GitHub; the locked runtime dependencies are installed during deployment.
+
 The **Semantic Release** workflow is started manually on `main`. When it
 publishes a stable GitHub release, **Deploy VSMP Release** joins Tailscale and
 deploys that exact tag to VSMPPi. The same deployment workflow can redeploy a
