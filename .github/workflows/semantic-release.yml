@@ -46,7 +46,7 @@ jobs:
 
       - name: Install release tooling
         run: >-
-          uv pip install pip python-semantic-release==10.7.0 GitPython==3.1.59
+          uv pip install --only-binary :all: pip python-semantic-release==10.7.0 GitPython==3.1.59
 
       - name: Publish semantic release
         env:
