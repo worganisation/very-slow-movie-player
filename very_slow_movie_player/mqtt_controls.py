@@ -59,6 +59,7 @@ ENTITY_ICONS = {
     "next_refresh": "mdi:clock-outline",
     "last_error": "mdi:alert-circle-outline",
     "displayed_frame": "mdi:image-frame",
+    "original_image": "mdi:image",
 }
 
 
@@ -93,6 +94,7 @@ class HAClient:
         }
         self._library: dict[str, str] = {"none": "No library selection"}
         self._image: bytes | None = None
+        self._original_image: bytes | None = None
 
     def start(self) -> None:
         """Start the Paho network thread without waiting on the broker."""
@@ -143,6 +145,12 @@ class HAClient:
         with self._lock:
             self._image = png
             self._publish("displayed_frame", png, retain=True)
+
+    def original_image(self, png: bytes) -> None:
+        """Retain the resized colour source of the successfully displayed frame."""
+        with self._lock:
+            self._original_image = png
+            self._publish("original_image", png, retain=True)
 
     def albums(self, labels: Mapping[str, str]) -> None:
         """Replace friendly names while keeping immutable album IDs internally."""
@@ -340,6 +348,13 @@ class HAClient:
             image_topic=f"{self.root}/displayed_frame",
             content_type="image/png",
         )
+        self._entity(
+            "image",
+            "original_image",
+            "Original image",
+            image_topic=f"{self.root}/original_image",
+            content_type="image/png",
+        )
 
     @staticmethod
     def _sensor_attributes(name: str) -> dict[str, object]:
@@ -378,6 +393,8 @@ class HAClient:
                 self._publish(f"state/{name}", value, retain=True)
             if self._image is not None:
                 self._publish("displayed_frame", self._image, retain=True)
+            if self._original_image is not None:
+                self._publish("original_image", self._original_image, retain=True)
             self._publish("availability", "online", retain=True)
 
     def _on_message(

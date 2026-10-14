@@ -240,6 +240,16 @@ def display_image(
                 "MQTT image update failed after display: {}", type(exc).__name__
             )
 
+        try:
+            with BytesIO() as png:
+                formatted.save(png, format="PNG")
+                mqtt.original_image(png.getvalue())
+        except Exception as exc:  # noqa: BLE001 - reporting must not interrupt playback
+            logger.warning(
+                "MQTT original image update failed after display: {}",
+                type(exc).__name__,
+            )
+
 
 def usable_frame_rate(stream: ProbeStream) -> float:
     """Read a positive finite frame rate from ffprobe stream metadata."""

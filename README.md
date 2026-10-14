@@ -156,6 +156,8 @@ Discovery uses the stable device ID `vsmp_pi` by default. The existing
 visible even when the service disconnects. Control and status entities use an
 availability topic and become unavailable when the service disconnects.
 
+**Original image** shows the colour source resized and letterboxed to the panel dimensions, before gamma correction and monochrome dithering. It updates only after a successful panel refresh, alongside **Displayed frame**. Both PNG images are retained and republished after MQTT reconnects or Home Assistant restarts; they remain visible while playback is offline. The original image uses `vsmp/vsmp_pi/original_image` with the default topic prefix and device ID.
+
 The device exposes Source, Playback enabled, Video refresh interval, Photo
 refresh interval, Video frame advance, Image gamma, Dithering method, Local video, Immich album,
 Immich media type, and Always restart videos. The album selector shows names
