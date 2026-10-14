@@ -41,9 +41,7 @@ the database update is recovered on retry.
 Downloads go into a private staging directory. `ffprobe` checks for a readable
 video stream and positive duration before an atomic rename makes the directory
 visible to playback. Jellyfin direct streaming uses the requested media source,
-and the original media is saved without transcoding. YouTube chooses a single
-progressive format and does not recode it. Source, version, audio selection and
-caption language are part of the stable import identity.
+and the original media is saved without transcoding. YouTube downloads the best available video and audio streams and merges separate streams without recoding; a combined format is used when separate streams are unavailable. Source, version, audio selection and caption language are part of the stable import identity.
 
 Caption selection prefers a complete human text track in the chosen language,
 then YouTube automatic captions, then configured ASR. Forced only and bitmap
