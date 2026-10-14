@@ -1,0 +1,333 @@
+Source: https://files.waveshare.com/upload/8/8e/E-paper-driver-hat-user-manual.pdf
+Retrieved: 2026-10-03
+Text extracted from the adjacent unmodified PDF; consult the PDF for diagrams and layout.
+
+--- Page 1 ---
+
+e-Pap
+er Driver HAT
+User Manual
+www.waveshare.com/wiki
+e-Paper Driver HAT
+User Manual
+
+
+--- Page 2 ---
+
+e-Paper Driver HAT
+User Manual
+Revision History
+Version Content Date Page
+V1.0.0 New creation 2024/6/6 All
+
+--- Page 3 ---
+
+e-Paper Driver HAT
+User Manual
+Contents
+1. OVERVIEW ............................................................................................................................................................... 1
+1.1 Features .........................................................................................................................................................1
+1.2 Product Parameters ................................................................................................................................... 2
+1.3 Interface Specification ..............................................................................................................................2
+1.4 Supported E-Paper Models ...................................................................................................................... 3
+2. USAGE .......................................................................................................................................................................5
+2.1 Switch Setting Introduction .....................................................................................................................5
+2.1.1 Display Config Settings ..................................................................................................................5
+2.1.2 Interface Config Settings ................................................................................................................ 6
+2.1.3 Setting Example ...............................................................................................................................6
+2.2 Work With Raspberry Pi ........................................................................................................................... 7
+2.2.1 Install Necessary Libraries ........................................................................................................... 7
+2.2.2 Hardware Connection .................................................................................................................... 8
+2.2.3 Expected Result ..................................................................................................................................8
+2.3 Work With Arduino .................................................................................................................................... 9
+2.3.1 Hardware Connection .......................................................................................................................9
+2.3.2 Expected Result ..................................................................................................................................9
+2.4 Work With STM32 .....................................................................................................................................10
+2.4.1 Hardware Connection .....................................................................................................................10
+2.4.2 Expected Result ................................................................................................................................11
+
+--- Page 4 ---
+
+e-Paper Driver HAT
+User Manual
+1
+1. OVERVIEW
+This product is an e-Paper driver HAT, which can drive multiple e-Paper HATs with SPI
+interfaces designed by Waveshare.
+1.1 FEATURES
+ Standard Raspberry Pi 40PIN GPIO extension header, supports Raspberry Pi series boards,
+Jetson Nano.
+ SPI interface, for connecting with other controller boards like Raspberry/Arduino/Nucleo, etc.
+ Comes with online development resources and manual (examples for Raspberry Pi/Jetson
+Nano/Arduino/STM32).
+
+
+--- Page 5 ---
+
+e-Paper Driver HAT
+User Manual
+2
+1.2 PRODUCT PARAMETERS
+Parameter Specification Unit
+Operating Voltage 3.3 V
+Communication Interface 3-wire SPI, 4-wire SPI
+Outline Dimension 65 × 30.2 mm
+Mounting Hole Size 3.0 mm
+1.3 INTERFACE SPECIFICATION
+NO. Name Description
+1 VCC 3.3V
+2 GND Ground
+3 DIN SPI MOSI pin
+4 CLK SPI SCK pin
+5 CS SPI chip selection pin, low active
+6 DC Data/Command control pin (high for data, low for command)
+7 RST External reset pin, low active
+8 BUSY Busy status output pin, low active
+
+--- Page 6 ---
+
+e-Paper Driver HAT
+User Manual
+3
+1.4 SUPPORTED E-PAPER MODELS
+Model Colors
+Grey
+Scale
+Resolution
+Display Size
+(mm)
+Outline
+Dimension
+(mm)
+Refresh
+Time (s)
+Partial
+Refresh
+Control
+Interface
+1.54inch e-Paper
+black,
+white 2 200x200 27.60×27.60 37.3 ×31.8 2 √ SPI
+1.54inch e-Paper (B)
+red,
+black,
+white
+2 200x200 27.60×27.60 37.3 ×31.8 8 × SPI
+2.13inch e-Paper
+black,
+white 2 250x122 48.55×23.71 59.2 ×29.2 2 √ SPI
+2.13inch e-Paper (B)
+red,
+black,
+white
+2 212x104 48.55×23.71 59.2 ×29.2 15 × SPI
+2.7inch e-Paper
+black,
+white 2 264x176 57.29×38.19 70.4 ×45.8 6 × SPI
+2.7inch e-Paper (B)
+red,
+black,
+white
+2 264x176 57.29×38.19 70.4 ×45.8 15 × SPI
+2.9inch e-Paper
+black,
+white 2 296x128 66.89×29.05 79.0 ×36.7 2 √ SPI
+2.9inch e-Paper (B)
+red,
+black,
+white
+2 296x128 66.89×29.05 79.0 ×36.7 15 × SPI
+4.2inch e-Paper
+black,
+white 2 400x300 84.80×63.60 90.1 ×77.0 4 × SPI
+4.2inch e-Paper (B)
+red,
+black,
+white
+2 400x300 84.80×63.60 90.1 ×77.0 15 × SPI
+7.5inch e-Paper
+black,
+white 2 640×384 163.20×97.92 170.2
+×111.2 6 × SPI
+7.5inch e-Paper (B)
+red,
+black,
+white
+2 640×384 163.20×97.92 170.2
+×111.2 31 × SPI
+Note: Refresh Time refers to the global refresh time, that is, the time used to refresh each frame of the
+image; If the e-paper HAT supports partial refresh, it takes about 0.3 seconds.
+
+--- Page 7 ---
+
+e-Paper Driver HAT
+User Manual
+4
+Please refer to the figure below for different models:
+
+
+--- Page 8 ---
+
+e-Paper Driver HAT
+User Manual
+5
+2. USAGE
+2.1 SWITCH SETTING INTRODUCTION
+As shown in the following figure, there are two toggle switches on the front of the
+e-Paper Driver HAT: Display Config and Interface Config. The following describes how to
+set the two switches.
+2.1.1 DISPLAY CONFIG SETTINGS
+The Display Config switch on the e-Paper Driver HAT is set to support driving multiple
+e-Paper HATs of Waveshare. The switch has two ends: A/B. When connecting different
+models of e-Paper HATs, the Display Config switch must be set in the following table:
+
+--- Page 9 ---
+
+e-Paper Driver HAT
+User Manual
+6
+B (If connected to the following models, the
+switch must be flipped to the B end)
+A (If connected to the following models, the
+switch must be flipped to the A end)
+1.54inch e-Paper (B) 1.54inch e-Paper
+2.13inch e-Paper (B) 2.13inch e-Paper
+2.7inch e-Paper 2.9inch e-Paper
+2.7inch e-Paper (B)
+2.9inch e-Paper (B)
+4.2inch e-Paper
+4.2inch e-Paper (B)
+7.5inch e-Paper
+7.5inch e-Paper (B)
+2.1.2 INTERFACE CONFIG SETTINGS
+The Interface Config switch can switch the e-Paper HAT to use 3-line SPI or 4-line SPI.
+When the switch is flipped to 1, the module works in 3-line SPI;
+When the switch is flipped to 0, the module works in 4-line SPI;
+The example program uses 4-line SPI by default.
+2.1.3 SETTING EXAMPLE
+As shown in the following figure, when the driver board is used for "7.5inch e-Paper",
+the Display Config must be set to B; the Interface Config is set to 0, and the module works
+in 4-line SPI mode.
+
+--- Page 10 ---
+
+e-Paper Driver HAT
+User Manual
+7
+2.2 WORK WITH RASPBERRY PI
+2.2.1 INSTALL NECESSARY LIBRARIES
+When the e-Paper HAT works with the Raspberry Pi, you need to install the necessary
+libraries (WiringPi, bcm2835, python libraries), otherwise the following demo may not work
+properly.
+
+--- Page 11 ---
+
+e-Paper Driver HAT
+User Manual
+8
+2.2.2 HARDWARE CONNECTION
+Hardware connection to development board Raspberry Pi (Raspberry Pi 3B):
+e-Paper Raspberry Pi 3B
+3.3V 3.3V
+GND GND
+DIN MOSI
+CLK SCLK
+CS CE0
+DC 25 (BCM)
+RST 17 (BCM)
+BUSY 24 (BCM)
+2.2.3 EXPECTED RESULT
+1) After installing the corresponding library, copy it to the Raspberry Pi and go to the
+corresponding directory:
+ bcm2835: Execute the command: make, which will compile the code and generate
+an execution file named epd. Execute the command: sudo./epd, and the demo will
+run.
+ Wiringpi: Execute the command: make, which will compile the code and generate
+an execution file named epd. Execute the command: sudo./epd, and the demo will
+run.
+ Python: Execute the command: sudo python main.py.
+2) The screen will display the image.
+Note: The module refreshes slowly and blinks several times during the refreshing process. Please wait
+patiently.
+
+--- Page 12 ---
+
+e-Paper Driver HAT
+User Manual
+9
+2.3 WORK WITH ARDUINO
+2.3.1 HARDWARE CONNECTION
+Hardware connection to development board UNO PLUS:
+e-Paper Arduino
+3.3V 3.3V
+GND GND
+DIN D11
+CLK D13
+CS D10
+DC D9
+RST D8
+BUSY D7
+2.3.2 EXPECTED RESULT
+1) Copy the files from the arduino/libraries directory in the sample package to
+documents/arduino/libraries, this location can be specified by clicking “ArduinoIDE”
+“File”
+ “Preferences”
+ “Sketchbook location”.
+2) Click “Upload" to upload the project.
+3) The screen will display the image.
+Note:
+ The module refreshes slowly and blinks several times during the refreshing process. Please wait
+patiently.
+ The RAM of the Arduino UNO is only 2K, and the module requires at least 30720 bytes of memory
+to fully update 1 frame of an image, and it cannot be partially refreshed (that is, it cannot refresh a
+partial image multiple times to fully update a frame of an image). Therefore, only the still image
+display program for Arduino is provided.
+
+--- Page 13 ---
+
+e-Paper Driver HAT
+User Manual
+10
+2.4 WORK WITH STM32
+ The NUCLEO-F103RB is used as the demo development board for three e-Paper HATs,
+1.54 inch/2.13 inch/2.9 inch e-Paper HATs, other types of e-Paper HAT with
+STM32F103ZE.
+ The demo is based on the HAL library, so the sample program can be ported to other
+STM chips using the STM32CubeMX.
+ The demo is compiled in the Keilv5 environment.
+2.4.1 HARDWARE CONNECTION
+If the development board used in the demo is STM32F103ZE, the hardware connection
+is as follows:
+e-Paper STM32F103ZE
+3.3V 3.3V
+GND GND
+DIN PA7 (MOSI)
+CLK PA5 (SCK)
+CS PA4
+BUSY PA3
+DC PA2
+RST PA1
+
+--- Page 14 ---
+
+e-Paper Driver HAT
+User Manual
+11
+If the development board used in the demo is NUCLEO-F103RB, the hardware
+connection is as follows:
+e-Paper NUCLEO-F103RB
+3.3V 3.3V
+GND GND
+DIN PA7
+CLK PA5
+CS PB6
+BUSY PA8
+DC PC7
+RST PA9
+2.4.2 EXPECTED RESULT
+1) Open the Keil project (epd-demo.uvprojx) in the MDK-ARM directory.
+2) Click “Build” to compile the project.
+3) Click “Download” to write the project to the chip.
+4) After the development board is reset, the screen displays the image.
+Note: The module refreshes slowly and blinks several times during the refreshing process. Please wait
+patiently.

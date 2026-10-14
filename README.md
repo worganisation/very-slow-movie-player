@@ -1,5 +1,19 @@
 # Very Slow Movie Player
 
+## Hardware
+
+This project uses a **Waveshare 7.5-inch e-Paper HAT V2 kit**, with an
+**800 × 480 monochrome panel** and the **e-Paper Driver HAT** for Raspberry Pi.
+The November 2020 purchase is recorded in the
+[hardware reference](docs/hardware/waveshare-7in5-v2.md), alongside local copies
+of the manufacturer manuals, panel specification, and HAT schematic. Start
+there for hardware discussions; the adapter's physical PCB revision has not
+been inspected.
+
+The host is a Raspberry Pi 4 Model B Rev 1.4, confirmed over SSH. The
+[Pi and lighting notes](docs/hardware/pi-and-lighting.md) record this inspection
+and the proposed power budget and PWM dimmer for the purchased 5 V COB strip.
+
 ## Media source
 
 `VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
@@ -91,6 +105,25 @@ structured album filter and cursor.
 the monochrome panel. Its default is `1.7`; set it to `1.0` for the original
 brightness, or increase it for a darker image. The accepted range is 0.1 to 10.
 
+`VSMP_DITHERING_METHOD` sets the default dithering method. The MQTT-discovered
+**Dithering method** select overrides it persistently, without a restart:
+
+| Method | Detail and pattern tradeoff |
+| --- | --- |
+| `Floyd-Steinberg` | Original full-resolution error diffusion; default. |
+| `Ordered (Bayer 8x8)` | Full-resolution regular dots; reduced streaks in our panel trials. |
+| `Ordered (1x2 pixels)` | Vertical pixel pairs; less vertical detail, fewer bands in our trials. |
+| `Floyd-Steinberg (2x2 pixels)` | Coarser square pixels; reduced streaks at a noticeable detail cost. |
+| `Floyd-Steinberg (2x1 pixels)` | Horizontal pixel pairs; worsened streaks on our panel, available for comparison. |
+| `Threshold (no dithering)` | Solid black/white threshold; loses intermediate shades. |
+
+Changing the method queues **Redisplay current frame**, even while paused, and
+never advances the video position. Multiple changes before a refresh coalesce
+into the latest choice. The three-minute panel dwell still applies. Caption
+text and its background are drawn after dithering and retain native resolution.
+The choice applies to local/library videos and Immich photos/videos; no method
+guarantees artifact-free output on every panel or scene.
+
 Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
 missing, startup fails so the service does not report a working display that
 is only a software mock. For local development without a panel, set
@@ -126,7 +159,7 @@ availability topic and become unavailable when the service disconnects.
 **Original image** shows the colour source resized and letterboxed to the panel dimensions, before gamma correction and monochrome dithering. It updates only after a successful panel refresh, alongside **Displayed frame**. Both PNG images are retained and republished after MQTT reconnects or Home Assistant restarts; they remain visible while playback is offline. The original image uses `vsmp/vsmp_pi/original_image` with the default topic prefix and device ID.
 
 The device exposes Source, Playback enabled, Video refresh interval, Photo
-refresh interval, Video frame advance, Image gamma, Local video, Immich album,
+refresh interval, Video frame advance, Image gamma, Dithering method, Local video, Immich album,
 Immich media type, and Always restart videos. The album selector shows names
 from Immich and disambiguates duplicates with IDs; the selected value is stored
 as an immutable album UUID. `IMMICH_MEDIA_TYPE` defaults to `both` and accepts
@@ -254,3 +287,10 @@ Configure a `production-deploy` GitHub environment with these values:
 Tailscale policy must allow `tag:ci` to reach the Pi's SSH port. Install the
 deploy public key in the Pi user's `authorized_keys`, and verify the Pi's SSH
 host key out of band before storing it in `VSMP_SSH_KNOWN_HOSTS`.
+
+## Offline library and captions
+
+[Import Jellyfin or YouTube media](docs/media-imports.md), then use the
+[Home Assistant library and caption controls](docs/library-controls.md).
+[Native 800×480 caption samples](docs/caption-samples/README.md) show the
+configurable monochrome layouts.
