@@ -32,6 +32,8 @@ rev = "v6.0.0"
 hooks = [
   {
     id = "check-added-large-files",
+    # Preserve this 1.8 MiB manufacturer specification byte-for-byte.
+    exclude = "^docs/hardware/vendor/waveshare-7in5-v2-specification\\.pdf$",
     args = ["--maxkb=1000"]
   },
   { id = "check-case-conflict" },
@@ -119,6 +121,8 @@ rev = "v2.4.3"
 hooks = [
   {
     id = "codespell",
+    # Manufacturer text extracts retain the source document's spelling.
+    exclude = "^docs/hardware/vendor/.*\\.txt$",
     additional_dependencies = ["tomli==2.0.1"]
   }
 ]

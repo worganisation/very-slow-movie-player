@@ -1,0 +1,3 @@
+Source: https://pip-assets.raspberrypi.com/categories/545-raspberry-pi-4-model-b/documents/RP-008343-DS-1-raspberry-pi-4-mechanical-drawing.pdf
+Retrieved: 2026-10-04
+Text extracted from the adjacent unmodified PDF; consult the PDF for geometry, dimensions, and layout.
