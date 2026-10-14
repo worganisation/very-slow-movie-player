@@ -28,10 +28,58 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     name: Release
-    # yamllint disable-line rule:line-length
-    uses: worganisation/github-config-files/.github/workflows/__semantic-release.yml@61df7cff685739aef6427c565445b5508619cd0a # 0.10.0
-    with:
-      python-version: '3.12'
-      force-deployment: >-
-        ${{ inputs.force-deployment != 'auto' && inputs.force-deployment || '' }}
-    secrets: inherit
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORGARSIDE_DEV_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: '3.12'
+          activate-environment: true
+
+      - name: Install release tooling
+        run: >-
+          uv pip install --only-binary :all: pip python-semantic-release==10.7.0 GitPython==3.1.59
+
+      - name: Publish semantic release
+        env:
+          GH_TOKEN: ${{ secrets.WORGARSIDE_DEV_TOKEN }}
+          GIT_COMMIT_AUTHOR: worgarside-dev <worgarside.dev@gmail.com>
+          FORCE_DEPLOYMENT: ${{ inputs.force-deployment }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+
+          git config --local user.name worgarside-dev
+          git config --local user.email worgarside.dev@gmail.com
+
+          command=(semantic-release -v -v --config pyproject.toml version)
+          case "$FORCE_DEPLOYMENT" in
+            auto) ;;
+            patch|minor|major) command+=("--$FORCE_DEPLOYMENT") ;;
+            *) echo "::error::Invalid release component"; exit 1 ;;
+          esac
+
+          expected_version="$("${command[@]}" --print)"
+          EXPECTED_VERSION="$expected_version" python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+          from very_slow_movie_player import __version__
+
+          metadata = tomllib.loads(Path("pyproject.toml").read_text())
+          expected = os.environ["EXPECTED_VERSION"]
+          if metadata["project"]["version"] != expected or __version__ != expected:
+              raise SystemExit(
+                  f"Prepare version {expected} in a reviewed PR before releasing"
+              )
+          PY
+
+          "${command[@]}" --no-commit --no-changelog --skip-build
