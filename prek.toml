@@ -33,11 +33,11 @@ hooks = [
   {
     id = "check-added-large-files",
     # Preserve large manufacturer PDFs byte-for-byte.
-    exclude = "^docs/hardware/vendor/(waveshare-7in5-v2-specification|adafruit-mosfet-driver-guide)\\.pdf$",
+    exclude = "^docs/hardware/vendor/(waveshare-7in5-v2/waveshare-7in5-v2-specification|adafruit-mosfet-driver/adafruit-mosfet-driver-guide)\\.pdf$",
     args = ["--maxkb=1000"]
   },
   { id = "check-case-conflict" },
-  { id = "end-of-file-fixer", exclude = "^docs/hardware/vendor/adafruit-mosfet-driver-license\\.txt$" },
+  { id = "end-of-file-fixer", exclude = "^docs/hardware/vendor/adafruit-mosfet-driver/adafruit-mosfet-driver-license\\.txt$" },
   { id = "mixed-line-ending" },
   {
     id = "pretty-format-json",
@@ -48,7 +48,7 @@ hooks = [
       "2"
     ]
   },
-  { id = "trailing-whitespace", exclude = "^docs/hardware/vendor/adafruit-mosfet-driver\\.brd$" }
+  { id = "trailing-whitespace", exclude = "^docs/hardware/vendor/adafruit-mosfet-driver/adafruit-mosfet-driver\\.brd$" }
 ]
 
 [[repos]]
