@@ -20,6 +20,22 @@ The seller's description lists both **8 W/m** and **20 W/5 m**. These are incons
 
 These are calculations from seller ratings, not measured values or guaranteed maximum current. A short section can also draw more current per metre than a full roll because it has less voltage drop.
 
+## Purchased MOSFET driver references
+
+The purchased dimmer board is the **Adafruit MOSFET Driver for Motors, Solenoids and LEDs, STEMMA JST PH 2 mm**, [product 5648](https://www.adafruit.com/product/5648). The connector is three-pin JST PH, not four-pin STEMMA QT. Purchase does not establish installation or physical validation of the lighting arrangement below.
+
+The [official guide](https://learn.adafruit.com/adafruit-mosfet-driver) covers pinouts, terminal blocks, Raspberry Pi PWM control and electrical limits. Its [downloads page](https://learn.adafruit.com/adafruit-mosfet-driver/downloads) supplies the schematic, fabrication print and links to CAD resources. Local manufacturer references are preserved unchanged; PDF text extracts normalize trailing whitespace for searching. Copyright and attribution remain with Adafruit Industries and Alpha & Omega Semiconductor, respectively.
+
+| Local reference | Manufacturer source and scope |
+| --- | --- |
+| [User guide PDF](vendor/adafruit-mosfet-driver-guide.pdf) / [text](vendor/adafruit-mosfet-driver-guide.txt) | [Adafruit guide download](https://cdn-learn.adafruit.com/downloads/pdf/adafruit-mosfet-driver.pdf); pinouts, wiring, PWM examples and drawings. |
+| [Schematic PNG](vendor/adafruit-mosfet-driver-schematic.png) | [Adafruit schematic](https://cdn-learn.adafruit.com/assets/assets/000/117/028/large1024/adafruit_products_schem.png); board circuit and component values. |
+| [Dimensioned fabrication print PNG](vendor/adafruit-mosfet-driver-fab-print.png) | [Adafruit fabrication print](https://cdn-learn.adafruit.com/assets/assets/000/117/029/large1024/adafruit_products_fab.png); dimensions are in inches, including the 1.00 × 0.70 inch board outline and 0.50 inch mounting-hole centre spacing. |
+| [EagleCAD board](vendor/adafruit-mosfet-driver.brd) / [schematic](vendor/adafruit-mosfet-driver.sch) / [license](vendor/adafruit-mosfet-driver-license.txt) | [Adafruit PCB source at commit `ea11049753a79330cc2651df233909c0191a5af4`](https://github.com/adafruit/Adafruit-MOSFET-Driver-STEMMA-PCB/tree/ea11049753a79330cc2651df233909c0191a5af4); original board and schematic files, under the supplied CC BY-SA 3.0 license. |
+| [AO3406 datasheet PDF](vendor/ao3406-datasheet.pdf) / [text](vendor/ao3406-datasheet.txt) | [Manufacturer datasheet hosted by Adafruit](https://cdn-shop.adafruit.com/product-files/5648/5648_ds_AO3406.pdf); transistor electrical characteristics and package dimensions. Component ratings are not whole-board current ratings. |
+
+For enclosure modelling, Adafruit also provides [3D CAD models for product 5648](https://github.com/adafruit/Adafruit_CAD_Parts/tree/main/5648%20MOSFET%20Driver). Use the drawings and CAD for geometry and check the actual board, connector clearance and cable bend space before finalising a mount. [SHA256SUMS](vendor/SHA256SUMS) identifies the local reference files alongside the display documentation.
+
 ## Power and dimming proposal
 
 A plain two-wire 5 V strip can share the Pi's 5 V header rail, provided the power supply, wiring, and connectors have enough capacity for the Pi, display, and LEDs at full brightness. The 5 V rail is available on physical pins 2 and 4. GPIO signal pins operate at 3.3 V and must not carry the LED load. See [Raspberry Pi's GPIO and power documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html).
