@@ -258,7 +258,7 @@ def usable_frame_rate(stream: ProbeStream) -> float:
             continue
         try:
             fps = float(Fraction(rate))
-        except (OverflowError, TypeError, ValueError, ZeroDivisionError):
+        except OverflowError, TypeError, ValueError, ZeroDivisionError:
             continue
         if isfinite(fps) and fps > 0:
             return fps
@@ -283,7 +283,7 @@ def usable_frame_count(stream: ProbeStream, info: ProbeInfo, fps: float) -> int:
             hours, minutes, seconds = end_tag.split(":")
             end_time = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
             duration = str(end_time - float(stream.get("start_time") or 0))
-        except (ValueError, OverflowError):
+        except ValueError, OverflowError:
             pass
     if duration is None:
         duration = info.get("format", {}).get("duration")

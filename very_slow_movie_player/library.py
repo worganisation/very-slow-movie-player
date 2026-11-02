@@ -378,7 +378,7 @@ class MediaLibrary:
             return False
         try:
             self.probe(videos[0])
-        except (ValueError, OSError, subprocess.SubprocessError):
+        except ValueError, OSError, subprocess.SubprocessError:
             return False
         captions = destination / "captions.json"
         connection = connect(self.database)
