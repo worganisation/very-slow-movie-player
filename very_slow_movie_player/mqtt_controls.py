@@ -120,7 +120,7 @@ class HAClient:
             try:
                 info.wait_for_publish(timeout=3)
                 acknowledged = info.is_published()
-            except (RuntimeError, ValueError):
+            except RuntimeError, ValueError:
                 pass
         if acknowledged:
             _ = self.client.disconnect()
