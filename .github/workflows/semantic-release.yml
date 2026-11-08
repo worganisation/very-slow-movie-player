@@ -60,7 +60,7 @@ jobs:
           git config --local user.name worgarside-dev
           git config --local user.email worgarside.dev@gmail.com
 
-          command=(semantic-release -v -v --config pyproject.toml version)
+          command=(semantic-release --config pyproject.toml version)
           case "$FORCE_DEPLOYMENT" in
             auto) ;;
             patch|minor|major) command+=("--$FORCE_DEPLOYMENT") ;;
