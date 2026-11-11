@@ -47,6 +47,72 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_display_failure_keeps_mqtt_light_running(self) -> None:
+        """Panel startup and refresh failures leave PWM commands operational."""
+        for startup_failure in (True, False):
+            with self.subTest(startup_failure=startup_failure):
+                runtime = Mock()
+                display = Mock()
+                light = Mock()
+                if startup_failure:
+                    display.init.side_effect = TimeoutError("panel disconnected")
+
+                def check_light_then_stop(
+                    _timeout: float, runtime: Mock = runtime, light: Mock = light
+                ) -> None:
+                    runtime.mqtt.stop.assert_not_called()
+                    light.close.assert_not_called()
+                    runtime.mqtt.frame_light.apply('{"state":"ON","brightness":64}')
+                    raise SystemExit(0)
+
+                runtime.mailbox.wake.wait.side_effect = check_light_then_stop
+                with (
+                    patch.object(self.main, "PlaybackRuntime", return_value=runtime),
+                    patch.object(self.main, "DISPLAY", display),
+                    patch.object(self.main, "FrameLight", return_value=light),
+                    patch.object(self.main, "load_progress"),
+                    patch.object(self.main, "clean_up_display"),
+                    patch.object(
+                        self.main,
+                        "play_selected_source",
+                        side_effect=self.main.PanelRefreshError("refresh failed"),
+                    ),
+                    self.assertRaises(SystemExit),
+                ):
+                    self.main.main()
+
+                runtime.mqtt.start.assert_called_once()
+                light.apply.assert_called_once_with('{"state":"ON","brightness":64}')
+                runtime.mqtt.state.assert_any_call(
+                    "playback_status", "display unavailable"
+                )
+                runtime.mqtt.stop.assert_called_once()
+                light.close.assert_called_once()
+
+    def test_light_startup_failure_still_runs_display(self) -> None:
+        """A failed PWM output does not prevent panel initialization or playback."""
+        runtime = Mock()
+        display = Mock()
+        light = Mock()
+        light.start.side_effect = RuntimeError("PWM unavailable")
+        with (
+            patch.object(self.main, "PlaybackRuntime", return_value=runtime),
+            patch.object(self.main, "DISPLAY", display),
+            patch.object(self.main, "FrameLight", return_value=light),
+            patch.object(self.main, "load_progress"),
+            patch.object(self.main, "clean_up_display"),
+            patch.object(
+                self.main, "play_selected_source", side_effect=SystemExit(0)
+            ) as play,
+            self.assertRaises(SystemExit),
+        ):
+            self.main.main()
+
+        display.init.assert_called_once()
+        display.clear.assert_called_once()
+        play.assert_called_once_with(runtime)
+        runtime.mqtt.state.assert_any_call("frame_light_availability", "offline")
+
     def test_original_image_discovery_and_reannouncement(self) -> None:
         """Colour and panel previews survive reconnect and HA birth together."""
         import json
