@@ -133,13 +133,6 @@ class RaspberryPi:
                 "GPIOInterface",
                 cast("object", import_module("RPi.GPIO")),
             )
-            spi_device = cast(
-                "SPIConstructor",
-                import_module("spidev").SpiDev,
-            )
-
-            # SPI device, bus = 0, device = 0
-            self.spi: SPIInterface = spi_device(0, 0)
         except ImportError as exc:
             if not SETTINGS.vsmp_allow_mock_hardware:
                 message = "Display hardware is unavailable; install RPi.GPIO and spidev, "
@@ -147,7 +140,6 @@ class RaspberryPi:
                 raise RuntimeError(message) from exc
 
             self.gpio = MagicMock()
-            self.spi = MagicMock()
 
     def digital_write(self, pin: int, *, value: bool) -> None:
         """Write the value to the pin."""
@@ -173,6 +165,14 @@ class RaspberryPi:
     def module_init(self) -> Literal[0]:
         """Module initialization."""
         self.module_initialized = False
+        try:
+            spi_device = cast("SPIConstructor", import_module("spidev").SpiDev)
+        except ImportError as exc:
+            if not SETTINGS.vsmp_allow_mock_hardware:
+                raise RuntimeError("Display SPI is unavailable; install spidev") from exc
+            spi_device = MagicMock()
+
+        self.spi: SPIInterface = spi_device(0, 0)
         try:
             self.gpio.setmode(self.gpio.BCM)
             self.gpio.setwarnings(False)  # noqa: FBT003

@@ -47,6 +47,24 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_spi_failure_does_not_prevent_light_startup(self) -> None:
+        """Creating the shared GPIO owner does not open the display SPI device."""
+        from frame_light import FrameLight
+        from utils.epd import epdconfig
+
+        gpio = Mock()
+        spi_module = Mock()
+        spi_module.SpiDev.side_effect = OSError("SPI device missing")
+        with patch.object(epdconfig, "import_module", side_effect=[gpio, spi_module]):
+            hardware = epdconfig.RaspberryPi()
+            light = FrameLight(hardware.gpio)
+            light.start()
+            with self.assertRaises(OSError):
+                hardware.module_init()
+            light.apply('{"state":"ON","brightness":128}')
+            gpio.PWM.return_value.ChangeDutyCycle.assert_called_with(128 * 100 / 255)
+            light.close()
+
     def test_display_failure_keeps_mqtt_light_running(self) -> None:
         """Panel startup and refresh failures leave PWM commands operational."""
         for startup_failure in (True, False):
