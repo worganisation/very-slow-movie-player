@@ -42,6 +42,22 @@ from settings import SETTINGS
 from utils.logging import logger
 
 
+class PWMInterface(Protocol):
+    """PWM operations used by the frame light."""
+
+    def start(self, _duty_cycle: float) -> None:
+        """Start PWM with a duty cycle in percent."""
+        ...
+
+    def ChangeDutyCycle(self, _duty_cycle: float) -> None:  # noqa: N802 - RPi.GPIO API
+        """Update the output duty cycle."""
+        ...
+
+    def stop(self) -> None:
+        """Stop generating pulses."""
+        ...
+
+
 class GPIOInterface(Protocol):
     """GPIO operations required by the display driver."""
 
@@ -65,12 +81,17 @@ class GPIOInterface(Protocol):
         """Enable or disable GPIO warnings."""
         ...
 
-    def setup(self, pin: int, _direction: int) -> None:
+    def setup(self, pin: int, _direction: int, *, initial: int = -1) -> None:
         """Configure a pin."""
+        _ = self, pin, initial
         ...
 
-    def cleanup(self) -> None:
-        """Release GPIO resources."""
+    def cleanup(self, _channel: int | tuple[int, ...]) -> None:
+        """Release the requested GPIO resources."""
+        ...
+
+    def PWM(self, _channel: int, _frequency: float) -> PWMInterface:  # noqa: N802 - RPi.GPIO API
+        """Create PWM for one output."""
         ...
 
 
@@ -107,18 +128,12 @@ class RaspberryPi:
 
     def __init__(self) -> None:
         self.module_initialized: bool = False
+        self._spi: SPIInterface | None = None
         try:
             self.gpio: GPIOInterface = cast(
                 "GPIOInterface",
                 cast("object", import_module("RPi.GPIO")),
             )
-            spi_device = cast(
-                "SPIConstructor",
-                import_module("spidev").SpiDev,
-            )
-
-            # SPI device, bus = 0, device = 0
-            self.spi: SPIInterface = spi_device(0, 0)
         except ImportError as exc:
             if not SETTINGS.vsmp_allow_mock_hardware:
                 message = "Display hardware is unavailable; install RPi.GPIO and spidev, "
@@ -126,7 +141,13 @@ class RaspberryPi:
                 raise RuntimeError(message) from exc
 
             self.gpio = MagicMock()
-            self.spi = MagicMock()
+
+    @property
+    def spi(self) -> SPIInterface:
+        """Require an initialized display transport for SPI operations."""
+        if self._spi is None:
+            raise RuntimeError("Display SPI is not initialized")
+        return self._spi
 
     def digital_write(self, pin: int, *, value: bool) -> None:
         """Write the value to the pin."""
@@ -153,6 +174,14 @@ class RaspberryPi:
         """Module initialization."""
         self.module_initialized = False
         try:
+            spi_device = cast("SPIConstructor", import_module("spidev").SpiDev)
+        except ImportError as exc:
+            if not SETTINGS.vsmp_allow_mock_hardware:
+                raise RuntimeError("Display SPI is unavailable; install spidev") from exc
+            spi_device = MagicMock()
+
+        self._spi = spi_device(0, 0)
+        try:
             self.gpio.setmode(self.gpio.BCM)
             self.gpio.setwarnings(False)  # noqa: FBT003
             self.gpio.setup(self.RST_PIN, self.gpio.OUT)
@@ -168,7 +197,7 @@ class RaspberryPi:
             except BaseException:  # noqa: BLE001 - release all partial hardware
                 logger.exception("Failed to close SPI after display setup failed")
             try:
-                self.gpio.cleanup()
+                self.gpio.cleanup((self.RST_PIN, self.DC_PIN, self.CS_PIN, self.BUSY_PIN))
             except BaseException:  # noqa: BLE001 - release all partial hardware
                 logger.exception("Failed to release GPIO after display setup failed")
             raise
@@ -184,7 +213,12 @@ class RaspberryPi:
             self.spi.close,
             lambda: self.gpio.output(self.RST_PIN, 0),
             lambda: self.gpio.output(self.DC_PIN, 0),
-            self.gpio.cleanup,
+            lambda: self.gpio.cleanup((
+                self.RST_PIN,
+                self.DC_PIN,
+                self.CS_PIN,
+                self.BUSY_PIN,
+            )),
         ):
             try:
                 cleanup()

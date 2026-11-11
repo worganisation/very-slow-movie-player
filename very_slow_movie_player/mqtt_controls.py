@@ -10,18 +10,22 @@ from typing import TYPE_CHECKING
 from dithering import DitheringMethod
 from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
 from paho.mqtt.enums import CallbackAPIVersion
+from pydantic import ValidationError
 from settings import SETTINGS
+from utils.logging import logger
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from controls import CommandMailbox
+    from frame_light import FrameLight
     from paho.mqtt.client import ConnectFlags, MQTTMessage
     from paho.mqtt.properties import Properties
     from paho.mqtt.reasoncodes import ReasonCode
 
 
 ENTITY_ICONS = {
+    "frame_light": "mdi:led-strip-variant",
     "source": "mdi:video-input-component",
     "media_type": "mdi:file-image",
     "album": "mdi:image-album",
@@ -67,6 +71,7 @@ class HAClient:
     """Keep MQTT connected throughout waits and reconnect after outages."""
 
     def __init__(self, mailbox: CommandMailbox) -> None:
+        self.frame_light: FrameLight | None = None
         self.mailbox: CommandMailbox = mailbox
         self.root: str = f"{SETTINGS.mqtt_topic_prefix}/{SETTINGS.mqtt_device_id}"
         self.discovery: str = SETTINGS.mqtt_discovery_prefix
@@ -192,7 +197,7 @@ class HAClient:
             "origin": {"name": "Very Slow Movie Player"},
             **extra,
         }
-        if domain != "image":
+        if domain != "image" and "availability" not in extra:
             config["availability_topic"] = f"{self.root}/availability"
         if self.client.is_connected():
             _ = self.client.publish(
@@ -204,6 +209,26 @@ class HAClient:
 
     def _discovery(self) -> None:
         common = {"optimistic": False, "retain": False}
+        if self.frame_light is not None:
+            self._entity(
+                "light",
+                "frame_light",
+                "Frame light",
+                schema="json",
+                brightness=True,
+                brightness_scale=255,
+                supported_color_modes=["brightness"],
+                transition=False,
+                flash=False,
+                command_topic=f"{self.root}/command/frame_light",
+                state_topic=f"{self.root}/state/frame_light",
+                availability=[
+                    {"topic": f"{self.root}/availability"},
+                    {"topic": f"{self.root}/state/frame_light_availability"},
+                ],
+                availability_mode="all",
+                **common,
+            )
         for name, label, options in (
             ("dithering_method", "Dithering method", list(DitheringMethod)),
             ("source", "Source", ["local", "immich", "library"]),
@@ -412,6 +437,10 @@ class HAClient:
             payload = message.payload.decode("utf-8")
         except UnicodeDecodeError:
             payload = "<invalid UTF-8>"
+        if name == "frame_light":
+            if not message.retain:
+                self._light_command(payload)
+            return
         if name == "album":
             with self._lock:
                 payload = next(
@@ -425,3 +454,28 @@ class HAClient:
                     payload,
                 )
         self.mailbox.submit(name, payload, retained=message.retain)
+
+    def _light_command(self, payload: str) -> None:
+        """Apply light commands independently of panel refresh and media work."""
+        with self._lock:
+            if self._stopping or self.frame_light is None:
+                return
+
+            try:
+                confirmed = self.frame_light.apply(payload)
+            except ValidationError:
+                logger.warning("Ignoring invalid frame light command")
+                return
+            except Exception:  # noqa: BLE001 - keep MQTT alive after GPIO failure
+                logger.exception("Frame light output failed")
+                self._states["frame_light_availability"] = "offline"
+            else:
+                self._states["frame_light"] = confirmed
+                self._publish("state/frame_light", confirmed, retain=True)
+                self._states["frame_light_availability"] = "online"
+
+            self._publish(
+                "state/frame_light_availability",
+                self._states["frame_light_availability"],
+                retain=True,
+            )

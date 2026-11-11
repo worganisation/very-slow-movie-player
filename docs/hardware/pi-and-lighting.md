@@ -1,4 +1,4 @@
-# VSMP Raspberry Pi and proposed frame lighting
+# VSMP Raspberry Pi and frame lighting
 
 ## Confirmed host
 
@@ -22,7 +22,7 @@ These are calculations from seller ratings, not measured values or guaranteed ma
 
 ## Purchased MOSFET driver references
 
-The purchased dimmer board is the **Adafruit MOSFET Driver for Motors, Solenoids and LEDs, STEMMA JST PH 2 mm**, [product 5648](https://www.adafruit.com/product/5648). The connector is three-pin JST PH, not four-pin STEMMA QT. Purchase does not establish installation or physical validation of the lighting arrangement below.
+The purchased dimmer board is the **Adafruit MOSFET Driver for Motors, Solenoids and LEDs, STEMMA JST PH 2 mm**, [product 5648](https://www.adafruit.com/product/5648). The connector is three-pin JST PH, not four-pin STEMMA QT. The driver switches the frame strip from GPIO12 with 500 Hz software PWM.
 
 The [official guide](https://learn.adafruit.com/adafruit-mosfet-driver) covers pinouts, terminal blocks, Raspberry Pi PWM control and electrical limits. Its [downloads page](https://learn.adafruit.com/adafruit-mosfet-driver/downloads) supplies the schematic, fabrication print and links to CAD resources. The original manufacturer references are preserved unchanged; PDF text extracts normalize trailing whitespace for searching. Copyright and attribution remain with Adafruit Industries and Alpha & Omega Semiconductor, respectively.
 
@@ -38,22 +38,20 @@ The [metric fabrication print](vendor/adafruit-mosfet-driver/adafruit-mosfet-dri
 
 For enclosure modelling, Adafruit also provides [3D CAD models for product 5648](https://github.com/adafruit/Adafruit_CAD_Parts/tree/main/5648%20MOSFET%20Driver). Use the drawings and CAD for geometry and check the actual board, connector clearance and cable bend space before finalising a mount. [SHA256SUMS](vendor/SHA256SUMS) identifies the local reference files alongside the display documentation.
 
-## Power and dimming proposal
+## Installed power and dimming
 
-A plain two-wire 5 V strip can share the Pi's 5 V header rail, provided the power supply, wiring, and connectors have enough capacity for the Pi, display, and LEDs at full brightness. The 5 V rail is available on physical pins 2 and 4. GPIO signal pins operate at 3.3 V and must not carry the LED load. See [Raspberry Pi's GPIO and power documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html).
-
-Use a low-side N-channel MOSFET dimmer whose input is explicitly compatible with 3.3 V logic and whose power stage accepts a 5 V load. For a discrete MOSFET, choose one with on-resistance specified at a gate voltage no higher than 3.3 V; the gate-threshold voltage alone is not a suitability rating. GPIO PWM controls brightness; the MOSFET carries the strip current. See [Adafruit's analog LED-strip PWM guide](https://learn.adafruit.com/rgb-led-strips/usage) for the switching principle (its illustrated strips use a different supply voltage).
-
-Proposed connections for the two-wire strip:
+The frame uses **180 mm** of the purchased strip and the Pi's **5.1 V, 3 A** power adapter. At the higher seller rating of 8 W/m, the strip's estimated load is **1.44 W / 0.288 A at 5 V**; this is not a current measurement. The Pi and LEDs share the 5 V rail. GPIO12 supplies only the control signal; the MOSFET carries the strip current.
 
 | Connection | Destination |
 | --- | --- |
-| Pi 5 V, physical pin 2 or 4 | LED strip positive |
-| LED strip negative | MOSFET drain / dimmer load negative |
-| MOSFET source / dimmer power ground | Pi ground, e.g. physical pin 6 |
-| GPIO12, physical pin 32 | Dimmer PWM input, or discrete gate through a series resistor |
-| Discrete MOSFET gate | Pull-down resistor to source, keeping lighting off before PWM starts |
+| Pi 5 V, physical pin 4 | Adafruit `V+` |
+| Pi ground, physical pin 6 | Adafruit `GND` |
+| GPIO12, physical pin 32 | Adafruit `In` |
+| Adafruit output `+` | LED strip positive |
+| Adafruit output `−` | LED strip negative |
 
-GPIO12 is a candidate hardware-PWM output outside VSMP's current display assignments: GPIO8, GPIO10, GPIO11, GPIO17, GPIO24, and GPIO25. Confirm overlay, audio, and other service usage before configuring PWM. Prefer it over GPIO18, which newer Waveshare HATs assign to PWR. A header breakout or splitter may be needed for physical access while the HAT is installed.
+The output `−` is switched by the MOSFET; connecting the strip negative directly to ground bypasses brightness control. The HAT connects off-header through its eight-wire interface: VCC to physical pin 1, GND to 9, DIN to 19, CLK to 23, CS to 24, DC to 22, RST to 11, and BUSY to 18. Leave the display ribbon and HAT switches configured for the panel.
 
-The dimmer is **proposed, not installed or tested**. Verify the strip's actual current, supply label, rail voltage, and undervoltage flags with LEDs at full brightness during Pi load and display refresh before treating this as a validated shared-power arrangement. If there is insufficient headroom, power the LEDs from a separate 5 V supply and join grounds; do not join the two supplies' positive rails.
+The VSMP service owns GPIO12 and exposes **Frame light** through MQTT discovery. It starts off and shuts down off, remembering the last nonzero brightness for off/on toggles within a process. Do not run a second GPIO/PWM controller on the same pin. See [frame lighting](../../README.md#frame-lighting) for MQTT behavior.
+
+Check supply voltage and undervoltage/throttling flags with the LEDs at full brightness during Pi load and display refresh. Zero flags do not establish spare supply capacity. If the combined load exceeds the supply or wiring capacity, use a separate 5 V LED supply with common ground; do not join the supplies' positive rails.

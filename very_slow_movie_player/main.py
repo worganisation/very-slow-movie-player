@@ -23,6 +23,7 @@ from controls import (
     save_controls,
 )
 from dithering import dither_image
+from frame_light import FrameLight
 from immich import Asset, ImmichAlbum
 from library_runtime import LibraryRuntime
 from mqtt_controls import HAClient
@@ -781,18 +782,58 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
         _ = runtime.mailbox.wake.wait(60)
 
 
+def start_frame_light(runtime: PlaybackRuntime, light: FrameLight) -> None:
+    """Isolate PWM startup errors from display playback."""
+    try:
+        light.start()
+        runtime.mqtt.state("frame_light", light.state())
+        runtime.mqtt.state("frame_light_availability", "online")
+    except Exception:  # noqa: BLE001 - a light failure must not stop playback
+        logger.exception("Frame light startup failed; playback remains available")
+        runtime.mqtt.state("frame_light_availability", "offline")
+        try:
+            light.close()
+        except Exception:  # noqa: BLE001 - display owns separate pins
+            logger.exception("Frame light cleanup failed")
+
+
+def run_display(runtime: PlaybackRuntime) -> None:
+    """Stop failed panel operations without stopping the MQTT light owner."""
+    initialized = False
+    failure: BaseException | None = None
+    try:
+        _ = DISPLAY.init()
+        initialized = True
+        DISPLAY.clear()  # Startup clear is separate from scheduled refreshes.
+        while True:
+            runtime.process_commands()
+            play_selected_source(runtime)
+    except Exception as exc:  # noqa: BLE001 - keep independent lighting online
+        failure = exc
+        logger.exception("Display playback stopped; frame light remains available")
+        runtime.mqtt.state("last_error", str(exc)[:255])
+        runtime.mqtt.state("playback_status", "display unavailable")
+        runtime.mqtt.state("next_refresh", "None")
+    finally:
+        if DISPLAY.pi.module_initialized:
+            clean_up_display(
+                enter_sleep=initialized and failure is None,
+                previous_error=failure or active_exception(),
+            )
+
+
 @logger.catch(reraise=True)
 def main() -> None:
     """Run a single hardware owner with a persistent, asynchronous MQTT client."""
     runtime = PlaybackRuntime()
     _ = load_progress()
     previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
-    display_initialized = False
     mqtt_started = False
+    light = FrameLight(DISPLAY.pi.gpio)
+    runtime.mqtt.frame_light = light
     try:
-        _ = DISPLAY.init()
-        display_initialized = True
-        DISPLAY.clear()  # Startup clear is separate from scheduled frame refreshes.
+        start_frame_light(runtime, light)
+
         runtime.mqtt.state("current_caption", "")
         runtime.mqtt.state("video_timestamp", "")
         try:
@@ -800,24 +841,25 @@ def main() -> None:
             mqtt_started = True
         except (ConnectionError, OSError) as exc:
             logger.warning("MQTT startup failed; playback continues: {}", exc)
+
+        run_display(runtime)
+
+        # A disconnected panel needs a powered-off reconnect and service restart.
         while True:
-            runtime.process_commands()
-            play_selected_source(runtime)
+            _ = runtime.mailbox.wake.wait(1)
+            runtime.mailbox.wake.clear()
     finally:
-        previous_error = active_exception()
         _ = signal(SIGTERM, SIG_IGN)
         try:
             try:
                 runtime.library.close()
             except Exception as exc:  # noqa: BLE001 - always finish hardware cleanup
                 logger.warning("Import worker shutdown failed: {}", type(exc).__name__)
-            if mqtt_started:
-                runtime.mqtt.stop()
-            if DISPLAY.pi.module_initialized:
-                clean_up_display(
-                    enter_sleep=display_initialized,
-                    previous_error=previous_error,
-                )
+            try:
+                if mqtt_started:
+                    runtime.mqtt.stop()
+            finally:
+                light.close()
         finally:
             _ = signal(SIGTERM, previous_sigterm_handler)
 
