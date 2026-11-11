@@ -12,7 +12,15 @@ been inspected.
 
 The host is a Raspberry Pi 4 Model B Rev 1.4, confirmed over SSH. The
 [Pi and lighting notes](docs/hardware/pi-and-lighting.md) record this inspection
-and the proposed power budget and PWM dimmer for the purchased 5 V COB strip.
+and the installed wiring, power budget, and PWM dimmer for the 5 V COB strip.
+
+## Frame lighting
+
+The **Frame light** MQTT-discovered light belongs to the VSMP device and controls the 5 V frame strip through the Adafruit MOSFET driver on **GPIO12 (physical pin 32)**. Brightness uses 500 Hz software PWM and responds independently of playback, media downloads, and panel refreshes. See [wiring and power](docs/hardware/pi-and-lighting.md).
+
+The light starts off on each service start and turns off during shutdown. Turning it off retains its last nonzero brightness until the process exits; turning it on without a brightness restores that value (initially 100%). MQTT reconnects and Home Assistant restarts republish the confirmed state. Broker-replayed retained commands are ignored. A GPIO command failure marks the light unavailable until a later command succeeds.
+
+With default MQTT settings, commands go to `vsmp/vsmp_pi/command/frame_light`, using the Home Assistant JSON light schema, for example `{"state":"ON","brightness":128}` or `{"state":"OFF"}`. Brightness is an integer from 0 to 255; zero turns the output off. Confirmed state is retained at `vsmp/vsmp_pi/state/frame_light`. Colour control, transitions, and effects are not supported.
 
 ## Media source
 

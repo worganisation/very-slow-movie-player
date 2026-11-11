@@ -42,6 +42,22 @@ from settings import SETTINGS
 from utils.logging import logger
 
 
+class PWMInterface(Protocol):
+    """PWM operations used by the frame light."""
+
+    def start(self, duty_cycle: float) -> None:
+        """Start PWM with a duty cycle in percent."""
+        ...
+
+    def ChangeDutyCycle(self, duty_cycle: float) -> None:  # noqa: N802 - RPi.GPIO API
+        """Update the output duty cycle."""
+        ...
+
+    def stop(self) -> None:
+        """Stop generating pulses."""
+        ...
+
+
 class GPIOInterface(Protocol):
     """GPIO operations required by the display driver."""
 
@@ -65,12 +81,16 @@ class GPIOInterface(Protocol):
         """Enable or disable GPIO warnings."""
         ...
 
-    def setup(self, pin: int, _direction: int) -> None:
+    def setup(self, pin: int, _direction: int, *, initial: int = -1) -> None:
         """Configure a pin."""
         ...
 
-    def cleanup(self) -> None:
-        """Release GPIO resources."""
+    def cleanup(self, channel: int | tuple[int, ...]) -> None:
+        """Release the requested GPIO resources."""
+        ...
+
+    def PWM(self, channel: int, frequency: float) -> PWMInterface:  # noqa: N802 - RPi.GPIO API
+        """Create PWM for one output."""
         ...
 
 
@@ -168,7 +188,7 @@ class RaspberryPi:
             except BaseException:  # noqa: BLE001 - release all partial hardware
                 logger.exception("Failed to close SPI after display setup failed")
             try:
-                self.gpio.cleanup()
+                self.gpio.cleanup((self.RST_PIN, self.DC_PIN, self.CS_PIN, self.BUSY_PIN))
             except BaseException:  # noqa: BLE001 - release all partial hardware
                 logger.exception("Failed to release GPIO after display setup failed")
             raise
@@ -184,7 +204,12 @@ class RaspberryPi:
             self.spi.close,
             lambda: self.gpio.output(self.RST_PIN, 0),
             lambda: self.gpio.output(self.DC_PIN, 0),
-            self.gpio.cleanup,
+            lambda: self.gpio.cleanup((
+                self.RST_PIN,
+                self.DC_PIN,
+                self.CS_PIN,
+                self.BUSY_PIN,
+            )),
         ):
             try:
                 cleanup()

@@ -23,6 +23,7 @@ from controls import (
     save_controls,
 )
 from dithering import dither_image
+from frame_light import FrameLight
 from immich import Asset, ImmichAlbum
 from library_runtime import LibraryRuntime
 from mqtt_controls import HAClient
@@ -789,9 +790,14 @@ def main() -> None:
     previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
     display_initialized = False
     mqtt_started = False
+    light = FrameLight(DISPLAY.pi.gpio)
+    runtime.mqtt.frame_light = light
     try:
         _ = DISPLAY.init()
         display_initialized = True
+        light.start()
+        runtime.mqtt.state("frame_light", light.state())
+        runtime.mqtt.state("frame_light_availability", "online")
         DISPLAY.clear()  # Startup clear is separate from scheduled frame refreshes.
         runtime.mqtt.state("current_caption", "")
         runtime.mqtt.state("video_timestamp", "")
@@ -811,13 +817,18 @@ def main() -> None:
                 runtime.library.close()
             except Exception as exc:  # noqa: BLE001 - always finish hardware cleanup
                 logger.warning("Import worker shutdown failed: {}", type(exc).__name__)
-            if mqtt_started:
-                runtime.mqtt.stop()
-            if DISPLAY.pi.module_initialized:
-                clean_up_display(
-                    enter_sleep=display_initialized,
-                    previous_error=previous_error,
-                )
+            try:
+                if mqtt_started:
+                    runtime.mqtt.stop()
+            finally:
+                try:
+                    light.close()
+                finally:
+                    if DISPLAY.pi.module_initialized:
+                        clean_up_display(
+                            enter_sleep=display_initialized,
+                            previous_error=previous_error,
+                        )
         finally:
             _ = signal(SIGTERM, previous_sigterm_handler)
 
