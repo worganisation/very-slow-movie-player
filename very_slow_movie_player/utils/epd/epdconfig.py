@@ -128,6 +128,7 @@ class RaspberryPi:
 
     def __init__(self) -> None:
         self.module_initialized: bool = False
+        self._spi: SPIInterface | None = None
         try:
             self.gpio: GPIOInterface = cast(
                 "GPIOInterface",
@@ -140,6 +141,13 @@ class RaspberryPi:
                 raise RuntimeError(message) from exc
 
             self.gpio = MagicMock()
+
+    @property
+    def spi(self) -> SPIInterface:
+        """Require an initialized display transport for SPI operations."""
+        if self._spi is None:
+            raise RuntimeError("Display SPI is not initialized")
+        return self._spi
 
     def digital_write(self, pin: int, *, value: bool) -> None:
         """Write the value to the pin."""
@@ -172,7 +180,7 @@ class RaspberryPi:
                 raise RuntimeError("Display SPI is unavailable; install spidev") from exc
             spi_device = MagicMock()
 
-        self.spi: SPIInterface = spi_device(0, 0)
+        self._spi = spi_device(0, 0)
         try:
             self.gpio.setmode(self.gpio.BCM)
             self.gpio.setwarnings(False)  # noqa: FBT003
