@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from json import dumps
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,7 +18,7 @@ MAX_BRIGHTNESS = 255
 class LightCommand(BaseModel):
     """Validate a complete command before changing the output."""
 
-    model_config: ConfigDict = ConfigDict(extra="forbid", strict=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", strict=True)
 
     state: Literal["ON", "OFF"]
     brightness: Annotated[int, Field(ge=0, le=MAX_BRIGHTNESS)] | None = None
