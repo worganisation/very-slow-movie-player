@@ -45,11 +45,11 @@ from utils.logging import logger
 class PWMInterface(Protocol):
     """PWM operations used by the frame light."""
 
-    def start(self, duty_cycle: float) -> None:
+    def start(self, _duty_cycle: float) -> None:
         """Start PWM with a duty cycle in percent."""
         ...
 
-    def ChangeDutyCycle(self, duty_cycle: float) -> None:  # noqa: N802 - RPi.GPIO API
+    def ChangeDutyCycle(self, _duty_cycle: float) -> None:  # noqa: N802 - RPi.GPIO API
         """Update the output duty cycle."""
         ...
 
@@ -83,13 +83,14 @@ class GPIOInterface(Protocol):
 
     def setup(self, pin: int, _direction: int, *, initial: int = -1) -> None:
         """Configure a pin."""
+        _ = initial
         ...
 
-    def cleanup(self, channel: int | tuple[int, ...]) -> None:
+    def cleanup(self, _channel: int | tuple[int, ...]) -> None:
         """Release the requested GPIO resources."""
         ...
 
-    def PWM(self, channel: int, frequency: float) -> PWMInterface:  # noqa: N802 - RPi.GPIO API
+    def PWM(self, _channel: int, _frequency: float) -> PWMInterface:  # noqa: N802 - RPi.GPIO API
         """Create PWM for one output."""
         ...
 

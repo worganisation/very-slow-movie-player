@@ -18,7 +18,7 @@ MAX_BRIGHTNESS = 255
 class LightCommand(BaseModel):
     """Validate a complete command before changing the output."""
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config: ConfigDict = ConfigDict(extra="forbid", strict=True)
 
     state: Literal["ON", "OFF"]
     brightness: Annotated[int, Field(ge=0, le=MAX_BRIGHTNESS)] | None = None
