@@ -83,7 +83,7 @@ class GPIOInterface(Protocol):
 
     def setup(self, pin: int, _direction: int, *, initial: int = -1) -> None:
         """Configure a pin."""
-        _ = initial
+        _ = self, pin, initial
         ...
 
     def cleanup(self, _channel: int | tuple[int, ...]) -> None:

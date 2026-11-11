@@ -219,6 +219,7 @@ class HAClient:
                 brightness_scale=255,
                 supported_color_modes=["brightness"],
                 transition=False,
+                flash=False,
                 command_topic=f"{self.root}/command/frame_light",
                 state_topic=f"{self.root}/state/frame_light",
                 availability=[
