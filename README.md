@@ -134,12 +134,8 @@ text and its background are drawn after dithering and retain native resolution.
 The choice applies to local/library videos and Immich photos/videos; no method
 guarantees artifact-free output on every panel or scene.
 
-Playback requires the Raspberry Pi GPIO and SPI Python modules. If either is
-missing, startup fails so the service does not report a working display that
-is only a software mock. For local development without a panel, set
-`VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop or playback
-failure, VSMP attempts to sleep the display and release its GPIO and SPI
-resources before exiting.
+Lighting requires the Raspberry Pi GPIO module; display playback additionally requires SPI. Hardware failures are reported rather than replaced with a software mock. For local development without hardware, set `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop, VSMP stops PWM and releases its GPIO resources, and attempts to sleep the display and release SPI. A display failure releases only display resources while MQTT lighting continues.
+
 After each completed clear or frame refresh, the driver powers off the panel
 booster and VCOM during the long playback pause, then powers on for the next
 refresh. This keeps the displayed image and controller registers without
@@ -254,9 +250,7 @@ installs only locked runtime dependencies; `just install-service` installs the
 existing unit, and `just install-all` does both. These recipes do not start the
 service. `just --list` shows the remaining service commands.
 
-If the display's busy signal stays active for more than 30 seconds, playback
-raises an error so systemd can restart the service. Inspect the service journal
-and the display wiring if the error recurs.
+If the display's busy signal stays active for more than 30 seconds, playback stops with `display unavailable` while MQTT lighting remains available. Inspect the service journal and display wiring. Power off before connecting the panel ribbon, then restart the service to initialize the display.
 
 The old Pipenv dependency updater and its cron installer have been removed.
 If they were installed on a Pi, check the `worgarside` user's `crontab -l` and
