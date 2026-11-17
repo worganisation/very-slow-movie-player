@@ -1,0 +1,15 @@
+[Unit]
+Description=VSMP motion-triggered video debug recorder
+Conflicts=vsmp.service
+After=vsmp.service
+
+[Service]
+Type=simple
+User=worgarside
+StateDirectory=vsmp-motion-debug
+StateDirectoryMode=0700
+UMask=0077
+KillMode=mixed
+TimeoutStopSec=30
+WorkingDirectory=/home/worgarside/very-slow-movie-player
+ExecStart=/home/worgarside/very-slow-movie-player/.venv/bin/python /home/worgarside/very-slow-movie-player/very_slow_movie_player/motion_debug.py

@@ -10,13 +10,13 @@ from math import pow as float_pow
 from pathlib import Path
 from shutil import which
 from signal import SIG_IGN, SIGTERM, signal
-from statistics import median
 from subprocess import DEVNULL, PIPE, run  # noqa: S404 - invoke the Pi camera CLI
 from sys import exception as active_exception
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import monotonic
 from typing import TYPE_CHECKING, NoReturn, cast
 
+from camera_motion import MOTION_CHECK_SECONDS, motion_detected, motion_sample
 from caption_render import render_caption
 from controls import (
     CommandMailbox,
@@ -47,9 +47,6 @@ if TYPE_CHECKING:
 
 DISPLAY = EPaperDisplay()
 CAMERA_SOURCES = frozenset({"camera", "camera_motion"})
-MOTION_SAMPLE_SIZE = (64, 36)
-MOTION_PIXEL_DELTA = 24
-MOTION_MINIMUM_PERCENT = 4
 
 
 class PanelRefreshError(Exception):
@@ -717,30 +714,6 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
         runtime.buttons.discard("next")
 
 
-def camera_motion_detected(runtime: PlaybackRuntime, image_path: Path) -> bool:
-    """Compare low-resolution luminance with the preceding camera sample."""
-    with (
-        Image.open(image_path) as snapshot,
-        snapshot.convert("L") as gray,
-        gray.resize(  # pyright: ignore[reportUnknownMemberType]
-            MOTION_SAMPLE_SIZE, Resampling.BOX
-        ) as sample,
-    ):
-        current = sample.tobytes()
-
-    previous = runtime.motion_reference
-    runtime.motion_reference = current
-    if previous is None:
-        return False
-
-    deltas = [after - before for before, after in zip(previous, current, strict=True)]
-    brightness_shift = median(deltas)
-    changed_pixels = sum(
-        abs(delta - brightness_shift) >= MOTION_PIXEL_DELTA for delta in deltas
-    )
-    return changed_pixels * 100 >= len(current) * MOTION_MINIMUM_PERCENT
-
-
 def play_camera_source(runtime: PlaybackRuntime) -> None:
     """Capture and display a single still when the panel is ready."""
     selected = runtime.selection
@@ -782,15 +755,17 @@ def play_camera_source(runtime: PlaybackRuntime) -> None:
         if runtime.selection != selected or not runtime.controls.playback_enabled:
             return
 
-        if runtime.controls.source == "camera_motion" and not camera_motion_detected(
-            runtime, image_path
-        ):
-            runtime.next_motion_check = (
-                capture_started + const.CAMERA_MOTION_CHECK_SECONDS
-            )
-            runtime.mqtt.state("playback_status", "waiting for motion")
-            runtime.mqtt.state("last_error", "none")
-            return
+        if runtime.controls.source == "camera_motion":
+            with Image.open(image_path) as snapshot:
+                sample = motion_sample(snapshot)
+
+            moving = motion_detected(runtime.motion_reference, sample)
+            runtime.motion_reference = sample
+            if not moving:
+                runtime.next_motion_check = capture_started + MOTION_CHECK_SECONDS
+                runtime.mqtt.state("playback_status", "waiting for motion")
+                runtime.mqtt.state("last_error", "none")
+                return
 
         image_path.chmod(0o600)
         display_image(

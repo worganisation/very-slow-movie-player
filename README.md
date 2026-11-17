@@ -100,6 +100,25 @@ VSMP takes a still when the panel is ready, then takes a new still every five mi
 
 Select **Camera (Motion)** in Home Assistant or set `VSMP_SOURCE=camera_motion` to refresh only when the camera detects motion and at least five minutes have elapsed since the last panel refresh. Once the interval has elapsed, VSMP samples the scene about every five seconds and compares consecutive frames. The first sample establishes a baseline. A detected change displays the same snapshot, then restarts the five-minute wait. The panel keeps its current picture while the scene is still. **Redisplay current frame** remains available for manual rendering changes.
 
+### Motion video debug service
+
+Use the debug service to record what the camera sees around motion events. It checks for motion about every five seconds using the same detector as **Camera (Motion)** and buffers 640 × 360 colour video at 5 fps. Each clip includes up to two minutes before the trigger, depending on how long the service has been running, and ends after ten minutes with no additional motion detection. New detections extend the same clip.
+
+Run these commands on the Pi after checking out a version with the debug service:
+
+```fish
+just install-service
+sudo systemctl stop vsmp.service
+sudo systemctl start vsmp-motion-debug.service
+```
+
+Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The rolling buffer stays in memory. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
+
+```fish
+sudo systemctl stop vsmp-motion-debug.service
+sudo systemctl start vsmp.service
+```
+
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,
