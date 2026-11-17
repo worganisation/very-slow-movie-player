@@ -229,9 +229,19 @@ class HAClient:
                 availability_mode="all",
                 **common,
             )
+        self._entity(
+            "select",
+            "source",
+            "Source",
+            options=["local", "immich", "library", "camera", "Camera (Motion)"],
+            command_topic=f"{self.root}/command/source",
+            state_topic=f"{self.root}/state/source",
+            command_template="{{ 'camera_motion' if value == 'Camera (Motion)' else value }}",
+            value_template="{{ 'Camera (Motion)' if value == 'camera_motion' else value }}",
+            **common,
+        )
         for name, label, options in (
             ("dithering_method", "Dithering method", list(DitheringMethod)),
-            ("source", "Source", ["local", "immich", "library", "camera"]),
             ("media_type", "Immich media type", ["photos", "videos", "both"]),
             ("caption_style", "Caption style", ["margin", "overlay"]),
             ("caption_background", "Caption background", ["light", "dark"]),

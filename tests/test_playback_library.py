@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 
-class PlaybackLibraryTests(unittest.TestCase):
+class PlaybackTestCase(unittest.TestCase):
     """Exercise the actual control and display paths with isolated state."""
 
     def setUp(self) -> None:
@@ -46,6 +46,10 @@ class PlaybackLibraryTests(unittest.TestCase):
         settings = importlib.import_module("settings")
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
+
+
+class CameraPlaybackTests(PlaybackTestCase):
+    """Verify timed and motion-triggered camera playback through source dispatch."""
 
     def test_camera_playback_retains_last_snapshot_on_capture_failure(self) -> None:
         """Capture on schedule and keep the last successful still for redisplay."""
@@ -93,6 +97,61 @@ class PlaybackLibraryTests(unittest.TestCase):
         runtime.mqtt.state.assert_any_call("playback_status", "source error")
         runtime.mailbox.wake.wait.assert_called_once_with(60)
         self.assertEqual(snapshot.read_bytes(), b"first still")
+
+    def test_camera_motion_requires_dwell_and_scene_change(self) -> None:
+        """Wait out the interval, sample a quiet scene, then show the changed image."""
+        runtime = object.__new__(self.main.PlaybackRuntime)
+        runtime.controls = self.controls.apply_command(
+            self.defaults, "source", "camera_motion"
+        )
+        runtime.last_panel_refresh = 1000
+        runtime.motion_reference = None
+        runtime.next_motion_check = 0
+        runtime.current_kind = "photo"
+        runtime.mqtt = Mock()
+        runtime.mailbox = Mock()
+        runtime.selection = runtime.selection_key()
+        runtime.buttons = set()
+        snapshot = self.root / "camera.jpg"
+        captured_at: list[float] = []
+
+        def advance_clock() -> None:
+            clock.return_value += runtime._normal_wait()
+
+        def capture_still(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            captured_at.append(clock.return_value)
+            with Image.new("L", (64, 36), 40 if len(captured_at) < 3 else 85) as frame:
+                if len(captured_at) == 4:
+                    frame.paste(200, (0, 0, 16, 12))
+                frame.save(command[-1])
+            return SimpleNamespace(returncode=0)
+
+        with (
+            patch.object(self.main.const, "CAMERA_PATH", snapshot),
+            patch.object(self.main, "which", return_value="/usr/bin/rpicam-still"),
+            patch.object(self.main, "run", side_effect=capture_still),
+            patch.object(self.main, "display_image") as display,
+            patch.object(self.main, "monotonic", return_value=1175) as clock,
+            patch.object(runtime, "wait_for_refresh", side_effect=advance_clock),
+            patch.object(runtime, "process_commands"),
+        ):
+            for _ in range(3):
+                self.main.play_selected_source(runtime)
+
+            display.assert_not_called()
+            runtime.mqtt.state.assert_any_call("playback_status", "waiting for motion")
+            self.main.play_selected_source(runtime)
+            self.assertEqual(runtime._normal_wait(), 300)
+
+        display.assert_called_once()
+        self.assertEqual(captured_at, [1300, 1305, 1310, 1315])
+        self.assertEqual(runtime.current_path, snapshot)
+        with Image.open(snapshot) as image:
+            self.assertGreater(image.getpixel((0, 0)), image.getpixel((63, 35)))
+
+
+class PlaybackLibraryTests(PlaybackTestCase):
+    """Exercise library, rendering, and Home Assistant integration."""
 
     def test_spi_failure_does_not_prevent_light_startup(self) -> None:
         """Creating the shared GPIO owner does not open the display SPI device."""

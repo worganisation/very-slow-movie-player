@@ -16,6 +16,7 @@ EXTRACT_PATH: Final = TMP_DIR / "vsmp_extract.jpg"
 FRAME_PATH: Final = TMP_DIR / "vsmp_frame.jpg"
 CAMERA_PATH: Final = TMP_DIR / "vsmp_camera.jpg"
 CAMERA_INTERVAL_SECONDS: Final = 300
+CAMERA_MOTION_CHECK_SECONDS: Final = 5
 
 PROGRESS_LOG: Final = MEDIA_DIR / "progress_log.json"
 """JSON file containing record of frames displayed per movie."""

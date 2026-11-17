@@ -26,7 +26,7 @@ With default MQTT settings, commands go to `vsmp/vsmp_pi/command/frame_light`, u
 
 ## Media source
 
-`VSMP_SOURCE` selects `local` (the default), `immich`, `library`, or `camera`. Both the service and
+`VSMP_SOURCE` selects `local` (the default), `immich`, `library`, `camera`, or `camera_motion`. Both the service and
 playlist command load the repository's private `.env` and validate **all**
 settings before playback, downloads, or GPIO startup. Populate the complete
 configuration before deploying, including a valid local video path, Immich
@@ -97,6 +97,8 @@ Set `VSMP_SOURCE=local` in the complete configuration above.
 Select `camera` in the Home Assistant **Source** control or set `VSMP_SOURCE=camera` in the Pi's private `.env`. With the Camera Module 3 connected, install Raspberry Pi OS's `rpicam-apps` and verify that `rpicam-still --list-cameras` detects the module. VSMP also accepts `libcamera-still` on systems with the older command name. See the [Raspberry Pi camera setup guide](https://www.raspberrypi.com/documentation/accessories/camera-software.html).
 
 VSMP takes a still when the panel is ready, then takes a new still every five minutes while playback is enabled. The Photo refresh interval applies to Immich photos. **Next** requests a fresh capture and **Redisplay current frame** reuses the last displayed image. Both respect the three-minute panel dwell. A failed capture leaves the current frame visible, reports a source error, and retries after a minute.
+
+Select **Camera (Motion)** in Home Assistant or set `VSMP_SOURCE=camera_motion` to refresh only when the camera detects motion and at least five minutes have elapsed since the last panel refresh. Once the interval has elapsed, VSMP samples the scene about every five seconds and compares consecutive frames. The first sample establishes a baseline. A detected change displays the same snapshot, then restarts the five-minute wait. The panel keeps its current picture while the scene is still. **Redisplay current frame** remains available for manual rendering changes.
 
 ### Immich album
 

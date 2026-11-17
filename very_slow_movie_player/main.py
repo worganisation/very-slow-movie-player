@@ -10,6 +10,7 @@ from math import pow as float_pow
 from pathlib import Path
 from shutil import which
 from signal import SIG_IGN, SIGTERM, signal
+from statistics import median
 from subprocess import DEVNULL, PIPE, run  # noqa: S404 - invoke the Pi camera CLI
 from sys import exception as active_exception
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -45,6 +46,10 @@ if TYPE_CHECKING:
     from ffmpeg import ProbeInfo, ProbeStream
 
 DISPLAY = EPaperDisplay()
+CAMERA_SOURCES = frozenset({"camera", "camera_motion"})
+MOTION_SAMPLE_SIZE = (64, 36)
+MOTION_PIXEL_DELTA = 24
+MOTION_MINIMUM_PERCENT = 4
 
 
 class PanelRefreshError(Exception):
@@ -347,6 +352,8 @@ class PlaybackRuntime:
         self.library: LibraryRuntime = LibraryRuntime(self.mqtt)
         self.last_panel_refresh: float | None = None
         self.last_camera_capture: float | None = None
+        self.motion_reference: bytes | None = None
+        self.next_motion_check: float = 0
         self.current_path: Path | None = None
         self.current_kind: str = "video"
         self.current_media: str = "none"
@@ -425,10 +432,12 @@ class PlaybackRuntime:
             else:
                 self.apply_setting(name, payload)
         if "restart_video" in self.buttons and (
-            self.current_kind != "video" or self.controls.source == "camera"
+            self.current_kind != "video" or self.controls.source in CAMERA_SOURCES
         ):
             self.buttons.discard("restart_video")
             self.mqtt.state("last_error", "No current video to restart")
+        if self.controls.source == "camera_motion":
+            self.buttons.discard("next")
         if not settings and not buttons:
             self.maybe_refresh_albums()
 
@@ -458,12 +467,17 @@ class PlaybackRuntime:
             self.mqtt.state("last_error", f"{name}: {exc}"[:255])
             return
         rendering_changed = candidate.dithering_method != self.controls.dithering_method
+        playback_changed = candidate.playback_enabled != self.controls.playback_enabled
         self.controls = candidate
         self.overridden.add(name)
         self.publish_controls()
         self.mqtt.state("last_error", "none")
-        if self.selection_key() != self.selection:
-            self.selection = self.selection_key()
+        selection = self.selection_key()
+        if playback_changed or selection != self.selection:
+            self.motion_reference = None
+            self.next_motion_check = 0
+        if selection != self.selection:
+            self.selection = selection
             self.buttons.clear()
             self.mqtt.state("playback_status", "switching source")
         if rendering_changed and self.current_path is not None:
@@ -490,6 +504,8 @@ class PlaybackRuntime:
     ) -> None:
         """Record the panel result and schedule the next normal update."""
         self.last_panel_refresh = monotonic()
+        self.motion_reference = None
+        self.next_motion_check = 0
         self.current_path = path
         self.current_kind = kind
         self.current_media = media
@@ -543,6 +559,10 @@ class PlaybackRuntime:
             self.mqtt.state("playback_status", "paused")
             self.mqtt.state("next_refresh", "None")
             remaining = 60
+        elif (
+            self.controls.source == "camera_motion" and self.motion_reference is not None
+        ):
+            self.mqtt.state("next_refresh", "None")
         elif self.last_panel_refresh is not None:
             self.mqtt.state(
                 "next_refresh",
@@ -599,6 +619,15 @@ class PlaybackRuntime:
         return max(0.0, 180.0 - (monotonic() - self.last_panel_refresh))
 
     def _normal_wait(self) -> float:
+        if self.controls.source == "camera_motion":
+            ready_at = self.next_motion_check
+            if self.last_panel_refresh is not None:
+                ready_at = max(
+                    ready_at, self.last_panel_refresh + const.CAMERA_INTERVAL_SECONDS
+                )
+
+            return ready_at - monotonic()
+
         if self.last_panel_refresh is None:
             return 0
         if self.controls.source == "camera":
@@ -688,6 +717,28 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
         runtime.buttons.discard("next")
 
 
+def camera_motion_detected(runtime: PlaybackRuntime, image_path: Path) -> bool:
+    """Compare low-resolution luminance with the preceding camera sample."""
+    with (
+        Image.open(image_path) as snapshot,
+        snapshot.convert("L") as gray,
+        gray.resize(MOTION_SAMPLE_SIZE, Resampling.BOX) as sample,
+    ):
+        current = sample.tobytes()
+
+    previous = runtime.motion_reference
+    runtime.motion_reference = current
+    if previous is None:
+        return False
+
+    deltas = [after - before for before, after in zip(previous, current, strict=True)]
+    brightness_shift = median(deltas)
+    changed_pixels = sum(
+        abs(delta - brightness_shift) >= MOTION_PIXEL_DELTA for delta in deltas
+    )
+    return changed_pixels * 100 >= len(current) * MOTION_MINIMUM_PERCENT
+
+
 def play_camera_source(runtime: PlaybackRuntime) -> None:
     """Capture and display a single still when the panel is ready."""
     selected = runtime.selection
@@ -727,6 +778,16 @@ def play_camera_source(runtime: PlaybackRuntime) -> None:
 
         runtime.process_commands()
         if runtime.selection != selected or not runtime.controls.playback_enabled:
+            return
+
+        if runtime.controls.source == "camera_motion" and not camera_motion_detected(
+            runtime, image_path
+        ):
+            runtime.next_motion_check = (
+                capture_started + const.CAMERA_MOTION_CHECK_SECONDS
+            )
+            runtime.mqtt.state("playback_status", "waiting for motion")
+            runtime.mqtt.state("last_error", "none")
             return
 
         image_path.chmod(0o600)
@@ -834,7 +895,7 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
             play_video(
                 runtime, runtime.library.ready_path(item.id), media_label=item.title
             )
-        elif runtime.controls.source == "camera":
+        elif runtime.controls.source in CAMERA_SOURCES:
             play_camera_source(runtime)
         else:
             play_immich_source(runtime)
