@@ -10,8 +10,9 @@ from itertools import takewhile
 from logging import INFO, basicConfig, getLogger
 from os import environ, read
 from pathlib import Path
-from shutil import which
+from shutil import copyfileobj, which
 from signal import SIGTERM, signal
+from tempfile import TemporaryDirectory
 from time import monotonic
 from typing import TYPE_CHECKING
 
@@ -22,9 +23,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from types import FrameType
 
-WIDTH = 640
-HEIGHT = 360
-FPS = 5
+WIDTH = 4608
+HEIGHT = 2592
+FPS = 14.35
 PRE_ROLL_SECONDS = 120
 QUIET_SECONDS = 600
 JPEG_END = b"\xff\xd9"
@@ -34,36 +35,45 @@ LOGGER = getLogger(__name__)
 def jpeg_frames(chunks: Iterable[bytes]) -> Iterator[bytes]:
     """Split the camera encoder's concatenated JPEG stream into whole frames."""
     pending = bytearray()
+    scan_from = 0
     for chunk in chunks:
         pending.extend(chunk)
-        while (end := pending.find(JPEG_END)) >= 0:
+        while (end := pending.find(JPEG_END, scan_from)) >= 0:
             end += len(JPEG_END)
             if not pending.startswith(b"\xff\xd8"):
                 raise ValueError("Unexpected data in camera MJPEG stream")
 
             yield bytes(pending[:end])
             del pending[:end]
+            scan_from = 0
 
+        scan_from = max(0, len(pending) - len(JPEG_END) + 1)
         if len(pending) > WIDTH * HEIGHT * 3:
             raise ValueError("Camera MJPEG stream did not produce a complete frame")
 
 
 class EventRecorder:
-    """Keep the pre-roll in memory and write only motion events to disk."""
+    """Keep the most recent frames in a temporary disk buffer."""
 
-    def __init__(self, output: Path, ffmpeg: str) -> None:
+    def __init__(self, output: Path, pre_roll: Path, ffmpeg: str) -> None:
         self.output: Path = output
+        self.pre_roll: Path = pre_roll
         self.ffmpeg: str = ffmpeg
-        self.buffer: deque[tuple[float, bytes]] = deque(maxlen=PRE_ROLL_SECONDS * FPS)
+        self.buffer: deque[tuple[float, Path]] = deque()
+        self.frame_number: int = 0
         self.clip: tuple[subprocess.Popen[bytes], Path] | None = None
         self.last_motion: float = 0.0
 
     def ingest(self, frame: bytes, timestamp: float, *, moving: bool) -> None:
         """Write the trigger frame once, and extend the event for each detection."""
+        while self.buffer and self.buffer[0][0] < timestamp - PRE_ROLL_SECONDS:
+            _, expired = self.buffer.popleft()
+            expired.unlink()
+
         if moving:
             self.last_motion = timestamp
             if self.clip is None:
-                self._start_clip(timestamp)
+                self._start_clip()
 
         if self.clip is not None:
             encoder, _ = self.clip
@@ -74,9 +84,12 @@ class EventRecorder:
             if timestamp - self.last_motion >= QUIET_SECONDS:
                 self.finish()
 
-        self.buffer.append((timestamp, frame))
+        frame_path = self.pre_roll / f"{self.frame_number}.jpg"
+        _ = frame_path.write_bytes(frame)
+        self.buffer.append((timestamp, frame_path))
+        self.frame_number += 1
 
-    def _start_clip(self, timestamp: float) -> None:
+    def _start_clip(self) -> None:
         """Open a clip and write the two minutes preceding the trigger."""
         event_time = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         path = self.output / f"motion-{event_time}.mkv"
@@ -107,9 +120,9 @@ class EventRecorder:
         if encoder.stdin is None:
             raise RuntimeError("FFmpeg input pipe is unavailable")
 
-        for captured_at, frame in self.buffer:
-            if captured_at >= timestamp - PRE_ROLL_SECONDS:
-                _ = encoder.stdin.write(frame)
+        for _, frame_path in self.buffer:
+            with frame_path.open("rb") as buffered:
+                copyfileobj(buffered, encoder.stdin)
 
     def finish(self) -> None:
         """Close the container and expose the completed clip under its final name."""
@@ -145,6 +158,7 @@ def monitor(frames: Iterable[bytes], recorder: EventRecorder) -> None:
         moving = False
         if timestamp >= next_check:
             with Image.open(BytesIO(frame)) as image:
+                _ = image.draft("L", (WIDTH // 8, HEIGHT // 8))
                 current = motion_sample(image)
 
             moving = motion_detected(previous, current)
@@ -164,7 +178,13 @@ def main() -> None:
             "Motion debug requires rpicam-vid (or libcamera-vid) and ffmpeg"
         )
 
-    recorder = EventRecorder(Path(environ["STATE_DIRECTORY"]), ffmpeg)
+    output = Path(environ["STATE_DIRECTORY"])
+    with TemporaryDirectory(dir=output, prefix=".pre-roll-") as pre_roll:
+        capture_motion(camera, EventRecorder(output, Path(pre_roll), ffmpeg))
+
+
+def capture_motion(camera: str, recorder: EventRecorder) -> None:
+    """Stream full-sensor MJPEG from the camera until the service stops."""
     with subprocess.Popen(  # noqa: S603 - trusted Pi camera CLI and fixed arguments
         [
             camera,
@@ -173,6 +193,8 @@ def main() -> None:
             "0",
             "--codec",
             "mjpeg",
+            "--mode",
+            f"{WIDTH}:{HEIGHT}:10",
             "--width",
             str(WIDTH),
             "--height",
@@ -200,7 +222,7 @@ def main() -> None:
 
             stream = capture.stdout.fileno()
             LOGGER.info("Motion debug is buffering video")
-            chunks = iter(lambda: read(stream, 64 * 1024), b"")
+            chunks = iter(lambda: read(stream, 256 * 1024), b"")
             monitor(takewhile(lambda _: not stopping, jpeg_frames(chunks)), recorder)
             if not stopping:
                 raise RuntimeError("Camera stream ended unexpectedly")

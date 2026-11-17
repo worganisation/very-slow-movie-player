@@ -12,7 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from shutil import which
 
-from motion_debug import EventRecorder, jpeg_frames
+from motion_debug import HEIGHT, WIDTH, EventRecorder, jpeg_frames
 from PIL import Image
 
 
@@ -35,13 +35,15 @@ class MotionDebugTests(unittest.TestCase):
         if ffmpeg is None or ffprobe is None:
             self.skipTest("ffmpeg and ffprobe are required for motion clip validation")
 
-        with Image.new("RGB", (64, 36), "red") as image, BytesIO() as jpeg:
+        with Image.new("RGB", (WIDTH, HEIGHT), "red") as image, BytesIO() as jpeg:
             image.save(jpeg, format="JPEG")
             frame = jpeg.getvalue()
 
         with tempfile.TemporaryDirectory() as work:
             output = Path(work)
-            recorder = EventRecorder(output, ffmpeg)
+            pre_roll = output / "pre-roll"
+            pre_roll.mkdir()
+            recorder = EventRecorder(output, pre_roll, ffmpeg)
             try:
                 recorder.ingest(frame, 9, moving=False)  # Outside the pre-roll.
                 recorder.ingest(frame, 10, moving=False)  # Exactly T minus two minutes.
@@ -64,7 +66,7 @@ class MotionDebugTests(unittest.TestCase):
                     "error",
                     "-count_frames",
                     "-show_entries",
-                    "stream=codec_name,nb_read_frames",
+                    "stream=codec_name,nb_read_frames,width,height,r_frame_rate",
                     "-of",
                     "json",
                     str(clip),
@@ -74,4 +76,13 @@ class MotionDebugTests(unittest.TestCase):
                 timeout=10,
             )
             stream = json.loads(result.stdout)["streams"][0]
-            self.assertEqual(stream, {"codec_name": "mjpeg", "nb_read_frames": "6"})
+            self.assertEqual(
+                stream,
+                {
+                    "codec_name": "mjpeg",
+                    "width": WIDTH,
+                    "height": HEIGHT,
+                    "r_frame_rate": "287/20",
+                    "nb_read_frames": "6",
+                },
+            )
