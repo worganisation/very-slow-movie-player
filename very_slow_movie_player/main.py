@@ -8,7 +8,7 @@ from io import BytesIO
 from math import ceil, isfinite
 from math import pow as float_pow
 from pathlib import Path
-from shutil import which
+from shutil import copyfile, which
 from signal import SIG_IGN, SIGTERM, signal
 from subprocess import DEVNULL, PIPE, run  # noqa: S404 - invoke the Pi camera CLI
 from sys import exception as active_exception
@@ -725,7 +725,7 @@ def play_camera_source(runtime: PlaybackRuntime) -> None:
     if camera is None:
         raise RuntimeError("Install rpicam-apps to use the camera source")
 
-    with TemporaryDirectory(dir=const.CAMERA_PATH.parent, prefix="vsmp-camera-") as work:
+    with TemporaryDirectory(prefix="vsmp-camera-") as work:
         image_path = Path(work) / "snapshot.jpg"
         capture_started = monotonic()
         capture = run(  # noqa: S603 - trusted Pi camera executable and fixed arguments
@@ -767,15 +767,23 @@ def play_camera_source(runtime: PlaybackRuntime) -> None:
                 runtime.mqtt.state("last_error", "none")
                 return
 
-        image_path.chmod(0o600)
-        display_image(
-            image_path, runtime.controls.gamma, runtime.mqtt, controls=runtime.controls
-        )
-        _ = image_path.replace(const.CAMERA_PATH)
+        const.CAMERA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+        archive_path = const.CAMERA_DIR / f"camera-{timestamp}.jpg"
+        with TemporaryDirectory(dir=const.CAMERA_DIR, prefix=".snapshot-") as staging:
+            archived = copyfile(image_path, Path(staging) / "snapshot.jpg")
+            archived.chmod(0o600)
+            display_image(
+                image_path,
+                runtime.controls.gamma,
+                runtime.mqtt,
+                controls=runtime.controls,
+            )
+            _ = archived.replace(archive_path)
 
     runtime.last_camera_capture = capture_started
     runtime.mqtt.state("caption_error", "none")
-    runtime.mark_displayed(const.CAMERA_PATH, "Camera snapshot", kind="camera")
+    runtime.mark_displayed(archive_path, "Camera snapshot", kind="camera")
 
 
 def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> NoReturn:

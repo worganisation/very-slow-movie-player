@@ -51,8 +51,8 @@ class PlaybackTestCase(unittest.TestCase):
 class CameraPlaybackTests(PlaybackTestCase):
     """Verify timed and motion-triggered camera playback through source dispatch."""
 
-    def test_camera_playback_retains_last_snapshot_on_capture_failure(self) -> None:
-        """Capture on schedule and keep the last successful still for redisplay."""
+    def test_camera_playback_archives_snapshots_across_capture_failure(self) -> None:
+        """Keep each successful capture available, including across a capture failure."""
         runtime = object.__new__(self.main.PlaybackRuntime)
         runtime.controls = self.controls.apply_command(self.defaults, "source", "camera")
         runtime.controls.photo_interval = 900
@@ -62,15 +62,15 @@ class CameraPlaybackTests(PlaybackTestCase):
         runtime.mailbox = Mock()
         runtime.selection = runtime.selection_key()
         runtime.buttons = {"next"}
-        snapshot = self.root / "camera.jpg"
+        archive = self.root / "camera"
 
         def capture_still(command: list[str], **_kwargs: object) -> SimpleNamespace:
-            clock.return_value = 1085
-            Path(command[-1]).write_bytes(b"first still")
+            Path(command[-1]).write_bytes(str(clock.return_value).encode())
+            clock.return_value += 5
             return SimpleNamespace(returncode=0)
 
         with (
-            patch.object(self.main.const, "CAMERA_PATH", snapshot),
+            patch.object(self.main.const, "CAMERA_DIR", archive),
             patch.object(self.main, "which", return_value="/usr/bin/rpicam-still"),
             patch.object(self.main, "run", side_effect=capture_still) as capture,
             patch.object(self.main, "display_image") as display,
@@ -81,22 +81,30 @@ class CameraPlaybackTests(PlaybackTestCase):
             self.assertEqual(runtime._normal_wait(), 80)
             clock.return_value = 1080
             self.main.play_selected_source(runtime)
-            self.assertEqual(runtime.current_path, snapshot)
+            (first_snapshot,) = archive.glob("*.jpg")
+            self.assertEqual(runtime.current_path, first_snapshot)
             self.assertEqual(runtime.current_media, "Camera snapshot")
             self.assertEqual(runtime.buttons, set())
             self.assertEqual(runtime._normal_wait(), 295)
+
+            clock.return_value = 1380
+            self.main.play_selected_source(runtime)
+            second_snapshot = runtime.current_path
 
             capture.side_effect = None
             capture.return_value = SimpleNamespace(
                 returncode=1, stderr=b"no cameras available"
             )
-            clock.return_value = 1380
+            clock.return_value = 1680
             self.main.play_selected_source(runtime)
 
-        display.assert_called_once()
+        self.assertEqual(display.call_count, 2)
         runtime.mqtt.state.assert_any_call("playback_status", "source error")
         runtime.mailbox.wake.wait.assert_called_once_with(60)
-        self.assertEqual(snapshot.read_bytes(), b"first still")
+        self.assertEqual(runtime.current_path, second_snapshot)
+        self.assertCountEqual(archive.iterdir(), [first_snapshot, second_snapshot])
+        self.assertEqual(first_snapshot.read_bytes(), b"1080")
+        self.assertEqual(second_snapshot.read_bytes(), b"1380")
 
     def test_camera_motion_requires_dwell_and_scene_change(self) -> None:
         """Wait out the interval, sample a quiet scene, then show the changed image."""
@@ -112,7 +120,7 @@ class CameraPlaybackTests(PlaybackTestCase):
         runtime.mailbox = Mock()
         runtime.selection = runtime.selection_key()
         runtime.buttons = set()
-        snapshot = self.root / "camera.jpg"
+        archive = self.root / "camera"
         captured_at: list[float] = []
 
         def advance_clock() -> None:
@@ -127,7 +135,7 @@ class CameraPlaybackTests(PlaybackTestCase):
             return SimpleNamespace(returncode=0)
 
         with (
-            patch.object(self.main.const, "CAMERA_PATH", snapshot),
+            patch.object(self.main.const, "CAMERA_DIR", archive),
             patch.object(self.main, "which", return_value="/usr/bin/rpicam-still"),
             patch.object(self.main, "run", side_effect=capture_still),
             patch.object(self.main, "display_image") as display,
@@ -145,6 +153,7 @@ class CameraPlaybackTests(PlaybackTestCase):
 
         display.assert_called_once()
         self.assertEqual(captured_at, [1300, 1305, 1310, 1315])
+        (snapshot,) = archive.glob("*.jpg")
         self.assertEqual(runtime.current_path, snapshot)
         with Image.open(snapshot) as image:
             self.assertGreater(image.getpixel((0, 0)), image.getpixel((63, 35)))
