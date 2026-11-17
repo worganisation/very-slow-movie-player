@@ -722,7 +722,9 @@ def camera_motion_detected(runtime: PlaybackRuntime, image_path: Path) -> bool:
     with (
         Image.open(image_path) as snapshot,
         snapshot.convert("L") as gray,
-        gray.resize(MOTION_SAMPLE_SIZE, Resampling.BOX) as sample,
+        gray.resize(  # pyright: ignore[reportUnknownMemberType]
+            MOTION_SAMPLE_SIZE, Resampling.BOX
+        ) as sample,
     ):
         current = sample.tobytes()
 
