@@ -1,4 +1,4 @@
-"""Hardware-free integration coverage for library controls and displayed captions."""
+"""Hardware-free integration coverage for playback and Home Assistant controls."""
 
 # ruff: noqa: PT009, PT027, PLC0415 - unittest runs without extra dependencies.
 
@@ -46,6 +46,53 @@ class PlaybackLibraryTests(unittest.TestCase):
         settings = importlib.import_module("settings")
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
+
+    def test_camera_playback_retains_last_snapshot_on_capture_failure(self) -> None:
+        """Capture on schedule and keep the last successful still for redisplay."""
+        runtime = object.__new__(self.main.PlaybackRuntime)
+        runtime.controls = self.controls.apply_command(self.defaults, "source", "camera")
+        runtime.controls.photo_interval = 900
+        runtime.last_panel_refresh = 900
+        runtime.current_kind = "photo"
+        runtime.mqtt = Mock()
+        runtime.mailbox = Mock()
+        runtime.selection = runtime.selection_key()
+        runtime.buttons = {"next"}
+        snapshot = self.root / "camera.jpg"
+
+        def capture_still(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            clock.return_value = 1085
+            Path(command[-1]).write_bytes(b"first still")
+            return SimpleNamespace(returncode=0)
+
+        with (
+            patch.object(self.main.const, "CAMERA_PATH", snapshot),
+            patch.object(self.main, "which", return_value="/usr/bin/rpicam-still"),
+            patch.object(self.main, "run", side_effect=capture_still) as capture,
+            patch.object(self.main, "display_image") as display,
+            patch.object(self.main, "monotonic", return_value=1000) as clock,
+            patch.object(runtime, "wait_ready", return_value=True),
+            patch.object(runtime, "process_commands"),
+        ):
+            self.assertEqual(runtime._normal_wait(), 80)
+            clock.return_value = 1080
+            self.main.play_selected_source(runtime)
+            self.assertEqual(runtime.current_path, snapshot)
+            self.assertEqual(runtime.current_media, "Camera snapshot")
+            self.assertEqual(runtime.buttons, set())
+            self.assertEqual(runtime._normal_wait(), 295)
+
+            capture.side_effect = None
+            capture.return_value = SimpleNamespace(
+                returncode=1, stderr=b"no cameras available"
+            )
+            clock.return_value = 1380
+            self.main.play_selected_source(runtime)
+
+        display.assert_called_once()
+        runtime.mqtt.state.assert_any_call("playback_status", "source error")
+        runtime.mailbox.wake.wait.assert_called_once_with(60)
+        self.assertEqual(snapshot.read_bytes(), b"first still")
 
     def test_spi_failure_does_not_prevent_light_startup(self) -> None:
         """Creating the shared GPIO owner does not open the display SPI device."""

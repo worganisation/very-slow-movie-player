@@ -1,4 +1,4 @@
-"""Display frames from a local video on the E-paper panel."""
+"""Display media and camera snapshots on the E-paper panel."""
 
 from __future__ import annotations
 
@@ -8,9 +8,11 @@ from io import BytesIO
 from math import ceil, isfinite
 from math import pow as float_pow
 from pathlib import Path
+from shutil import which
 from signal import SIG_IGN, SIGTERM, signal
+from subprocess import DEVNULL, PIPE, run  # noqa: S404 - invoke the Pi camera CLI
 from sys import exception as active_exception
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import monotonic
 from typing import TYPE_CHECKING, NoReturn, cast
 
@@ -344,6 +346,7 @@ class PlaybackRuntime:
         self.mqtt: HAClient = HAClient(self.mailbox)
         self.library: LibraryRuntime = LibraryRuntime(self.mqtt)
         self.last_panel_refresh: float | None = None
+        self.last_camera_capture: float | None = None
         self.current_path: Path | None = None
         self.current_kind: str = "video"
         self.current_media: str = "none"
@@ -413,9 +416,6 @@ class PlaybackRuntime:
         self.mqtt.state("library_id", self.mqtt.library_label(self.controls.library_id))
         settings, buttons = self.mailbox.drain()
         self.buttons.update(buttons)
-        if "restart_video" in self.buttons and self.current_kind == "photo":
-            self.buttons.discard("restart_video")
-            self.mqtt.state("last_error", "No current video to restart")
         if "redisplay" in self.buttons and self.current_path is None:
             self.buttons.discard("redisplay")
             self.mqtt.state("last_error", "No frame to redisplay")
@@ -424,6 +424,11 @@ class PlaybackRuntime:
                 self.library.submit(name, payload)
             else:
                 self.apply_setting(name, payload)
+        if "restart_video" in self.buttons and (
+            self.current_kind != "video" or self.controls.source == "camera"
+        ):
+            self.buttons.discard("restart_video")
+            self.mqtt.state("last_error", "No current video to restart")
         if not settings and not buttons:
             self.maybe_refresh_albums()
 
@@ -596,10 +601,17 @@ class PlaybackRuntime:
     def _normal_wait(self) -> float:
         if self.last_panel_refresh is None:
             return 0
+        if self.controls.source == "camera":
+            if self.current_kind != "camera" or self.last_camera_capture is None:
+                return self._minimum_wait()
+
+            next_capture = self.last_camera_capture + const.CAMERA_INTERVAL_SECONDS
+            return max(self._minimum_wait(), next_capture - monotonic())
+
         interval = (
-            self.controls.photo_interval
-            if self.current_kind == "photo"
-            else self.controls.video_interval
+            self.controls.video_interval
+            if self.current_kind == "video"
+            else self.controls.photo_interval
         )
         return max(
             self._minimum_wait(), interval - (monotonic() - self.last_panel_refresh)
@@ -674,6 +686,58 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
     runtime.mark_displayed(media, media_label, kind="photo")
     if runtime.wait_ready(runtime.selection):
         runtime.buttons.discard("next")
+
+
+def play_camera_source(runtime: PlaybackRuntime) -> None:
+    """Capture and display a single still when the panel is ready."""
+    selected = runtime.selection
+    if not runtime.wait_ready(selected):
+        return
+
+    runtime.buttons.discard("next")
+    camera = which("rpicam-still") or which("libcamera-still")
+    if camera is None:
+        raise RuntimeError("Install rpicam-apps to use the camera source")
+
+    with TemporaryDirectory(dir=const.CAMERA_PATH.parent, prefix="vsmp-camera-") as work:
+        image_path = Path(work) / "snapshot.jpg"
+        capture_started = monotonic()
+        capture = run(  # noqa: S603 - trusted Pi camera executable and fixed arguments
+            [
+                camera,
+                "--nopreview",
+                "--timeout",
+                "2000",
+                "--autofocus-on-capture",
+                "--width",
+                "1536",
+                "--height",
+                "864",
+                "--output",
+                str(image_path),
+            ],
+            check=False,
+            stdout=DEVNULL,
+            stderr=PIPE,
+            timeout=20,
+        )
+        if capture.returncode:
+            error = capture.stderr.decode(errors="replace").strip()[-200:]
+            raise RuntimeError(f"Camera capture failed ({capture.returncode}): {error}")
+
+        runtime.process_commands()
+        if runtime.selection != selected or not runtime.controls.playback_enabled:
+            return
+
+        image_path.chmod(0o600)
+        display_image(
+            image_path, runtime.controls.gamma, runtime.mqtt, controls=runtime.controls
+        )
+        _ = image_path.replace(const.CAMERA_PATH)
+
+    runtime.last_camera_capture = capture_started
+    runtime.mqtt.state("caption_error", "none")
+    runtime.mark_displayed(const.CAMERA_PATH, "Camera snapshot", kind="camera")
 
 
 def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> NoReturn:
@@ -770,6 +834,8 @@ def play_selected_source(runtime: PlaybackRuntime) -> None:
             play_video(
                 runtime, runtime.library.ready_path(item.id), media_label=item.title
             )
+        elif runtime.controls.source == "camera":
+            play_camera_source(runtime)
         else:
             play_immich_source(runtime)
     except PanelRefreshError:

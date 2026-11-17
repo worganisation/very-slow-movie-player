@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     vsmp_dithering_method: DitheringMethod = DitheringMethod.FLOYD_STEINBERG
-    vsmp_source: Literal["local", "immich", "library"] = "local"
+    vsmp_source: Literal["local", "immich", "library", "camera"] = "local"
     vsmp_video_path: Path
     immich_url: AnyHttpUrl
     immich_api_key: SecretStr

@@ -231,7 +231,7 @@ class HAClient:
             )
         for name, label, options in (
             ("dithering_method", "Dithering method", list(DitheringMethod)),
-            ("source", "Source", ["local", "immich", "library"]),
+            ("source", "Source", ["local", "immich", "library", "camera"]),
             ("media_type", "Immich media type", ["photos", "videos", "both"]),
             ("caption_style", "Caption style", ["margin", "overlay"]),
             ("caption_background", "Caption background", ["light", "dark"]),
