@@ -52,11 +52,11 @@ class EventRecorder:
     """Keep the pre-roll in memory and write only motion events to disk."""
 
     def __init__(self, output: Path, ffmpeg: str) -> None:
-        self.output = output
-        self.ffmpeg = ffmpeg
+        self.output: Path = output
+        self.ffmpeg: str = ffmpeg
         self.buffer: deque[tuple[float, bytes]] = deque(maxlen=PRE_ROLL_SECONDS * FPS)
         self.clip: tuple[subprocess.Popen[bytes], Path] | None = None
-        self.last_motion = 0.0
+        self.last_motion: float = 0.0
 
     def ingest(self, frame: bytes, timestamp: float, *, moving: bool) -> None:
         """Write the trigger frame once, and extend the event for each detection."""
