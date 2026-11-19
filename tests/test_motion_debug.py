@@ -11,6 +11,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 from shutil import which
+from unittest.mock import patch
 
 from motion_debug import HEIGHT, WIDTH, EventRecorder, jpeg_frames
 from PIL import Image
@@ -29,8 +30,8 @@ class MotionDebugTests(unittest.TestCase):
             list(jpeg_frames([frame[:-1], frame[-1:] + frame])), [frame, frame]
         )
 
-    def test_event_includes_pre_roll_and_extends_until_quiet(self) -> None:
-        """Probe a real saved clip for the expected pre-roll, trigger and tail frames."""
+    def test_event_records_at_full_resolution_and_extends_until_quiet(self) -> None:
+        """Probe a real saved clip and verify a second detection extends its deadline."""
         ffmpeg, ffprobe = which("ffmpeg"), which("ffprobe")
         if ffmpeg is None or ffprobe is None:
             self.skipTest("ffmpeg and ffprobe are required for motion clip validation")
@@ -39,27 +40,20 @@ class MotionDebugTests(unittest.TestCase):
             image.save(jpeg, format="JPEG")
             frame = jpeg.getvalue()
 
+        with Image.new("RGB", (WIDTH, HEIGHT), "red") as image, BytesIO() as jpeg:
+            image.paste("white", (0, 0, WIDTH // 3, HEIGHT // 3))
+            image.save(jpeg, format="JPEG")
+            moved = jpeg.getvalue()
+
         with tempfile.TemporaryDirectory() as work:
             output = Path(work)
-            pre_roll = output / "pre-roll"
-            pre_roll.mkdir()
             notified: list[Path] = []
-            recorder = EventRecorder(output, pre_roll, ffmpeg, notified.append)
-            try:
-                recorder.ingest(frame, 9, moving=False)  # Outside the pre-roll.
-                recorder.ingest(frame, 10, moving=False)  # Exactly T minus two minutes.
-                recorder.ingest(frame, 129, moving=False)
-                recorder.ingest(frame, 130, moving=True)
-                recorder.ingest(frame, 400, moving=True)
-                recorder.ingest(frame, 430, moving=False)  # First deadline has elapsed.
-                self.assertIsNotNone(recorder.clip)
-                recorder.ingest(
-                    frame, 700, moving=False
-                )  # Five minutes since the last trigger.
-                (clip,) = output.glob("motion-*.mkv")
-                self.assertEqual(notified, [clip])
-            finally:
-                recorder.finish()
+            recorder = EventRecorder(output, ffmpeg, notified.append)
+            with patch("motion_debug.monotonic", side_effect=[130, 400, 430, 699, 700]):
+                recorder.record([frame, moved, moved, moved, moved], triggered_at=129)
+
+            (clip,) = output.glob("motion-*.mkv")
+            self.assertEqual(notified, [clip])
 
             result = subprocess.run(  # noqa: S603 - fixed local FFprobe command
                 [
@@ -85,6 +79,6 @@ class MotionDebugTests(unittest.TestCase):
                     "width": WIDTH,
                     "height": HEIGHT,
                     "r_frame_rate": "287/20",
-                    "nb_read_frames": "6",
+                    "nb_read_frames": "5",
                 },
             )

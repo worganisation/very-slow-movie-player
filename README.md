@@ -104,7 +104,7 @@ Both camera sources save each displayed capture as a full-colour, timestamped JP
 
 ### Motion video debug service
 
-Use the debug service to record what the camera sees around motion events. It checks for motion about every five seconds using the same detector as **Camera (Motion)** and requests full-sensor 4608 × 2592 colour MJPEG at 14.35 fps, the Camera Module 3 sensor-mode limit at that resolution. The debug feed is rotated 180° at capture. The achieved frame rate depends on the Pi and its storage. Each clip includes up to two minutes before the trigger, depending on how long the service has been running, and ends after five minutes with no additional motion detection. New detections extend the same clip.
+The debug service watches at 640 × 360 and 5 fps and checks for motion once a second. On detection, it switches to full-sensor 4608 × 2592 colour MJPEG at up to 14.35 fps. The debug feed is rotated 180° at capture. Recording starts when the full-resolution stream is ready. Each clip ends after five minutes with no additional motion detection, and new detections extend the same clip.
 
 Run these commands on the Pi after checking out a version with the debug service:
 
@@ -114,7 +114,7 @@ sudo systemctl stop vsmp.service
 sudo systemctl start vsmp-motion-debug.service
 ```
 
-Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The temporary rolling buffer is on disk. For example, at 500 KB per frame and the target frame rate, allow about 0.86 GB for the buffer and 26 GB per hour of recorded video. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
+Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The low-resolution monitor keeps only a motion reference in memory. Clips have no pre-roll. At 500 KB per frame and the target frame rate, allow about 26 GB per hour of recorded video. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
 
 After each clip is finalized, the recorder publishes its filename to `vsmp/vsmp_pi/event/motion_clip_saved` using the same MQTT settings as playback. The event is sent without retention and can trigger a Home Assistant notification.
 

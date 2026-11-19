@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import subprocess  # noqa: S404 - fixed camera and video commands without a shell
-from collections import deque
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import partial
 from io import BytesIO
-from itertools import takewhile
 from logging import INFO, basicConfig, getLogger
 from os import environ, read
 from pathlib import Path
-from shutil import copyfileobj, which
+from select import select
+from shutil import which
 from signal import SIGTERM, signal
-from tempfile import TemporaryDirectory
+from threading import Event
 from time import monotonic
 from typing import TYPE_CHECKING
 
@@ -31,7 +31,10 @@ if TYPE_CHECKING:
 WIDTH = 4608
 HEIGHT = 2592
 FPS = 14.35
-PRE_ROLL_SECONDS = 120
+MONITOR_WIDTH = 640
+MONITOR_HEIGHT = 360
+MONITOR_FPS = 5
+MONITOR_CHECK_SECONDS = 1
 QUIET_SECONDS = 300
 JPEG_END = b"\xff\xd9"
 LOGGER = getLogger(__name__)
@@ -58,50 +61,41 @@ def jpeg_frames(chunks: Iterable[bytes]) -> Iterator[bytes]:
 
 
 class EventRecorder:
-    """Keep the most recent frames in a temporary disk buffer."""
+    """Write a full-resolution clip after the motion trigger."""
 
     def __init__(
-        self,
-        output: Path,
-        pre_roll: Path,
-        ffmpeg: str,
-        on_clip_saved: Callable[[Path], None],
+        self, output: Path, ffmpeg: str, on_clip_saved: Callable[[Path], None]
     ) -> None:
         self.output: Path = output
-        self.pre_roll: Path = pre_roll
         self.ffmpeg: str = ffmpeg
         self.on_clip_saved: Callable[[Path], None] = on_clip_saved
-        self.buffer: deque[tuple[float, Path]] = deque()
-        self.frame_number: int = 0
         self.clip: tuple[subprocess.Popen[bytes], Path] | None = None
-        self.last_motion: float = 0.0
 
-    def ingest(self, frame: bytes, timestamp: float, *, moving: bool) -> None:
-        """Write the trigger frame once, and extend the event for each detection."""
-        while self.buffer and self.buffer[0][0] < timestamp - PRE_ROLL_SECONDS:
-            _, expired = self.buffer.popleft()
-            expired.unlink()
+    def record(self, frames: Iterable[bytes], triggered_at: float) -> None:
+        """Write frames until the scene has been quiet for five minutes."""
+        last_motion = triggered_at
+        try:
+            for frame, timestamp, moving in motion_frames(frames, MOTION_CHECK_SECONDS):
+                if self.clip is None:
+                    self.clip = self._start_clip()
+                    LOGGER.info(
+                        "First recording frame %.2fs after detection",
+                        timestamp - triggered_at,
+                    )
 
-        if moving:
-            self.last_motion = timestamp
-            if self.clip is None:
-                self._start_clip()
+                encoder, _ = self.clip
+                if encoder.stdin is None:
+                    raise RuntimeError("FFmpeg input pipe is unavailable")
 
-        if self.clip is not None:
-            encoder, _ = self.clip
-            if encoder.stdin is None:
-                raise RuntimeError("FFmpeg input pipe is unavailable")
+                _ = encoder.stdin.write(frame)
+                if moving:
+                    last_motion = timestamp
+                if timestamp - last_motion >= QUIET_SECONDS:
+                    return
+        finally:
+            self.finish()
 
-            _ = encoder.stdin.write(frame)
-            if timestamp - self.last_motion >= QUIET_SECONDS:
-                self.finish()
-
-        frame_path = self.pre_roll / f"{self.frame_number}.jpg"
-        _ = frame_path.write_bytes(frame)
-        self.buffer.append((timestamp, frame_path))
-        self.frame_number += 1
-
-    def _start_clip(self) -> None:
+    def _start_clip(self) -> tuple[subprocess.Popen[bytes], Path]:
         """Open a clip and write the two minutes preceding the trigger."""
         event_time = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         path = self.output / f"motion-{event_time}.mkv"
@@ -126,15 +120,8 @@ class EventRecorder:
             ],
             stdin=subprocess.PIPE,
         )
-        self.clip = (encoder, path)
         LOGGER.info("Motion detected, recording %s", path.name)
-
-        if encoder.stdin is None:
-            raise RuntimeError("FFmpeg input pipe is unavailable")
-
-        for _, frame_path in self.buffer:
-            with frame_path.open("rb") as buffered:
-                copyfileobj(buffered, encoder.stdin)
+        return encoder, path
 
     def finish(self) -> None:
         """Close the container and expose the completed clip under its final name."""
@@ -162,8 +149,10 @@ class EventRecorder:
         self.on_clip_saved(path)
 
 
-def monitor(frames: Iterable[bytes], recorder: EventRecorder) -> None:
-    """Sample motion on the playback detector's cadence and record every frame."""
+def motion_frames(
+    frames: Iterable[bytes], check_seconds: float
+) -> Iterator[tuple[bytes, float, bool]]:
+    """Pass through camera frames and compare samples at the requested interval."""
     previous: bytes | None = None
     next_check = 0.0
     for frame in frames:
@@ -171,14 +160,14 @@ def monitor(frames: Iterable[bytes], recorder: EventRecorder) -> None:
         moving = False
         if timestamp >= next_check:
             with Image.open(BytesIO(frame)) as image:
-                _ = image.draft("L", (WIDTH // 8, HEIGHT // 8))
+                _ = image.draft("L", (image.width // 8, image.height // 8))
                 current = motion_sample(image)
 
             moving = motion_detected(previous, current)
             previous = current
-            next_check = timestamp + MOTION_CHECK_SECONDS
+            next_check = timestamp + check_seconds
 
-        recorder.ingest(frame, timestamp, moving=moving)
+        yield frame, timestamp, moving
 
 
 def publish_clip_saved(client: Client, topic: str, path: Path) -> None:
@@ -219,15 +208,38 @@ def main() -> None:
 
     try:
         notify = partial(publish_clip_saved, client, topic)
-        with TemporaryDirectory(dir=output, prefix=".pre-roll-") as pre_roll:
-            capture_motion(camera, EventRecorder(output, Path(pre_roll), ffmpeg, notify))
+        capture_motion(camera, EventRecorder(output, ffmpeg, notify))
     finally:
         _ = client.disconnect()
         _ = client.loop_stop()
 
 
-def capture_motion(camera: str, recorder: EventRecorder) -> None:
-    """Stream full-sensor MJPEG from the camera until the service stops."""
+def camera_chunks(stream: int, stopping: Event) -> Iterator[bytes]:
+    """Read the camera pipe while allowing a service stop to interrupt the wait."""
+    while not stopping.is_set():
+        ready, _, _ = select([stream], [], [], 0.25)
+        if ready:
+            if not (chunk := read(stream, 256 * 1024)):
+                if not stopping.is_set():
+                    raise RuntimeError("Camera stream ended unexpectedly")
+
+                return
+
+            yield chunk
+
+
+@contextmanager
+def camera_frames(
+    camera: str, stopping: Event, *, recording: bool
+) -> Iterator[Iterator[bytes]]:
+    """Open one camera mode and release the camera before switching modes."""
+    if recording:
+        width, height, fps = WIDTH, HEIGHT, FPS
+        mode = f"{WIDTH}:{HEIGHT}:10"
+    else:
+        width, height, fps = MONITOR_WIDTH, MONITOR_HEIGHT, MONITOR_FPS
+        mode = "2304:1296:10"  # Binned sensor mode with full field of view.
+
     with subprocess.Popen(  # noqa: S603 - trusted Pi camera CLI and fixed arguments
         [
             camera,
@@ -239,13 +251,13 @@ def capture_motion(camera: str, recorder: EventRecorder) -> None:
             "--codec",
             "mjpeg",
             "--mode",
-            f"{WIDTH}:{HEIGHT}:10",
+            mode,
             "--width",
-            str(WIDTH),
+            str(width),
             "--height",
-            str(HEIGHT),
+            str(height),
             "--framerate",
-            str(FPS),
+            str(fps),
             "--quality",
             "80",
             "--output",
@@ -253,27 +265,50 @@ def capture_motion(camera: str, recorder: EventRecorder) -> None:
         ],
         stdout=subprocess.PIPE,
     ) as capture:
-        stopping = False
-
-        def stop_capture(_signum: int, _frame: FrameType | None) -> None:
-            nonlocal stopping
-            stopping = True
-            capture.terminate()
-
-        _ = signal(SIGTERM, stop_capture)
         try:
             if capture.stdout is None:
                 raise RuntimeError("Camera output pipe is unavailable")
 
-            stream = capture.stdout.fileno()
-            LOGGER.info("Motion debug is buffering video")
-            chunks = iter(lambda: read(stream, 256 * 1024), b"")
-            monitor(takewhile(lambda _: not stopping, jpeg_frames(chunks)), recorder)
-            if not stopping:
-                raise RuntimeError("Camera stream ended unexpectedly")
+            yield jpeg_frames(camera_chunks(capture.stdout.fileno(), stopping))
         finally:
             capture.terminate()
-            recorder.finish()
+            try:
+                _ = capture.wait(timeout=0.75)
+            except subprocess.TimeoutExpired:
+                capture.kill()
+                _ = capture.wait()
+
+
+def capture_motion(camera: str, recorder: EventRecorder) -> None:
+    """Watch at low resolution and switch to full resolution only for clips."""
+    stopping = Event()
+
+    def stop_capture(_signum: int, _frame: FrameType | None) -> None:
+        stopping.set()
+
+    previous_handler = signal(SIGTERM, stop_capture)
+    try:
+        while not stopping.is_set():
+            LOGGER.info("Watching for motion at %sx%s", MONITOR_WIDTH, MONITOR_HEIGHT)
+            with camera_frames(camera, stopping, recording=False) as frames:
+                triggered_at = next(
+                    (
+                        timestamp
+                        for _, timestamp, moving in motion_frames(
+                            frames, MONITOR_CHECK_SECONDS
+                        )
+                        if moving
+                    ),
+                    None,
+                )
+
+            if triggered_at is None or stopping.is_set():
+                return
+
+            with camera_frames(camera, stopping, recording=True) as frames:
+                recorder.record(frames, triggered_at)
+    finally:
+        _ = signal(SIGTERM, previous_handler)
 
 
 if __name__ == "__main__":
