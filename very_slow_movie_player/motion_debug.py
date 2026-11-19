@@ -232,6 +232,8 @@ def capture_motion(camera: str, recorder: EventRecorder) -> None:
         [
             camera,
             "--nopreview",
+            "--rotation",
+            "180",
             "--timeout",
             "0",
             "--codec",
