@@ -50,12 +50,12 @@ class MotionDebugTests(unittest.TestCase):
                 recorder.ingest(frame, 10, moving=False)  # Exactly T minus two minutes.
                 recorder.ingest(frame, 129, moving=False)
                 recorder.ingest(frame, 130, moving=True)
-                recorder.ingest(frame, 700, moving=True)
-                recorder.ingest(frame, 730, moving=False)  # First deadline has elapsed.
+                recorder.ingest(frame, 400, moving=True)
+                recorder.ingest(frame, 430, moving=False)  # First deadline has elapsed.
                 self.assertIsNotNone(recorder.clip)
                 recorder.ingest(
-                    frame, 1300, moving=False
-                )  # Ten minutes since the last trigger.
+                    frame, 700, moving=False
+                )  # Five minutes since the last trigger.
                 (clip,) = output.glob("motion-*.mkv")
                 self.assertEqual(notified, [clip])
             finally:

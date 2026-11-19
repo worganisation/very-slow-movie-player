@@ -104,7 +104,7 @@ Both camera sources save each displayed capture as a full-colour, timestamped JP
 
 ### Motion video debug service
 
-Use the debug service to record what the camera sees around motion events. It checks for motion about every five seconds using the same detector as **Camera (Motion)** and requests full-sensor 4608 × 2592 colour MJPEG at 14.35 fps, the Camera Module 3 sensor-mode limit at that resolution. The debug feed is rotated 180° at capture. The achieved frame rate depends on the Pi and its storage. Each clip includes up to two minutes before the trigger, depending on how long the service has been running, and ends after ten minutes with no additional motion detection. New detections extend the same clip.
+Use the debug service to record what the camera sees around motion events. It checks for motion about every five seconds using the same detector as **Camera (Motion)** and requests full-sensor 4608 × 2592 colour MJPEG at 14.35 fps, the Camera Module 3 sensor-mode limit at that resolution. The debug feed is rotated 180° at capture. The achieved frame rate depends on the Pi and its storage. Each clip includes up to two minutes before the trigger, depending on how long the service has been running, and ends after five minutes with no additional motion detection. New detections extend the same clip.
 
 Run these commands on the Pi after checking out a version with the debug service:
 
