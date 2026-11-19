@@ -23,7 +23,7 @@ from paho.mqtt.client import MQTT_ERR_SUCCESS
 from PIL import Image
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator
+    from collections.abc import Callable, Generator, Iterable, Iterator
     from types import FrameType
 
     from paho.mqtt.client import Client
@@ -231,7 +231,7 @@ def camera_chunks(stream: int, stopping: Event) -> Iterator[bytes]:
 @contextmanager
 def camera_frames(
     camera: str, stopping: Event, *, recording: bool
-) -> Iterator[Iterator[bytes]]:
+) -> Generator[Iterator[bytes], None, None]:
     """Open one camera mode and release the camera before switching modes."""
     if recording:
         width, height, fps = WIDTH, HEIGHT, FPS
