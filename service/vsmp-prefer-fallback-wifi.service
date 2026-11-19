@@ -1,0 +1,12 @@
+[Unit]
+Description=Prefer the temporary VSMP Wi-Fi router when present
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+RuntimeDirectory=vsmp-prefer-fallback-wifi
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+TimeoutStartSec=55
+ExecStart=/usr/local/libexec/vsmp-prefer-fallback-wifi

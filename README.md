@@ -123,6 +123,31 @@ sudo systemctl stop vsmp-motion-debug.service
 sudo systemctl start vsmp.service
 ```
 
+### Temporary preferred Wi-Fi
+
+The optional `vsmp-prefer-fallback-wifi.timer` uses the NetworkManager profiles already configured on VSMPPi. When `wlan0` is connected to `iot-wg` and two consecutive scans see `iot-wg-fallback`, it activates the `iot-wg-fallback` profile. A failed switch restores `iot-wg` and waits two minutes before trying again. When the temporary router disappears, NetworkManager reconnects using its saved profiles and priorities. A switch can briefly interrupt SSH.
+
+Install and enable it from the VSMP checkout on the Pi:
+
+```fish
+sudo install -D -m 0755 utilities/prefer_fallback_wifi.sh /usr/local/libexec/vsmp-prefer-fallback-wifi
+sudo install -m 0644 service/vsmp-prefer-fallback-wifi.service service/vsmp-prefer-fallback-wifi.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now vsmp-prefer-fallback-wifi.timer
+```
+
+Remove the automatic switch and its installed files:
+
+```fish
+sudo systemctl disable --now vsmp-prefer-fallback-wifi.timer
+sudo systemctl stop vsmp-prefer-fallback-wifi.service
+sudo systemctl clean --what=runtime vsmp-prefer-fallback-wifi.service
+sudo rm -f /usr/local/libexec/vsmp-prefer-fallback-wifi /etc/systemd/system/vsmp-prefer-fallback-wifi.service /etc/systemd/system/vsmp-prefer-fallback-wifi.timer
+sudo systemctl daemon-reload
+```
+
+The saved Wi-Fi profiles remain available with their NetworkManager priorities. If the Pi is currently on the temporary router and needs to return to the main network immediately, run `sudo nmcli connection up id netplan-wlan0-iot-wg ifname wlan0` from a local console.
+
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,
