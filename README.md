@@ -116,6 +116,8 @@ sudo systemctl start vsmp-motion-debug.service
 
 Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The temporary rolling buffer is on disk. For example, at 500 KB per frame and the target frame rate, allow about 0.86 GB for the buffer and 26 GB per hour of recorded video. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
 
+After each clip is finalized, the recorder publishes its filename to `vsmp/vsmp_pi/event/motion_clip_saved` using the same MQTT settings as playback. The event is sent without retention and can trigger a Home Assistant notification.
+
 ```fish
 sudo systemctl stop vsmp-motion-debug.service
 sudo systemctl start vsmp.service

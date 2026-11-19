@@ -43,7 +43,8 @@ class MotionDebugTests(unittest.TestCase):
             output = Path(work)
             pre_roll = output / "pre-roll"
             pre_roll.mkdir()
-            recorder = EventRecorder(output, pre_roll, ffmpeg)
+            notified: list[Path] = []
+            recorder = EventRecorder(output, pre_roll, ffmpeg, notified.append)
             try:
                 recorder.ingest(frame, 9, moving=False)  # Outside the pre-roll.
                 recorder.ingest(frame, 10, moving=False)  # Exactly T minus two minutes.
@@ -56,6 +57,7 @@ class MotionDebugTests(unittest.TestCase):
                     frame, 1300, moving=False
                 )  # Ten minutes since the last trigger.
                 (clip,) = output.glob("motion-*.mkv")
+                self.assertEqual(notified, [clip])
             finally:
                 recorder.finish()
 
