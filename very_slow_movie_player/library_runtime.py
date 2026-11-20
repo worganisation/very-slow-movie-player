@@ -135,7 +135,7 @@ class LibraryRuntime:
                     path.read_text(encoding="utf-8")
                 )
             text = caption_at(self.caption_cache[path].cues, timestamp, offset)
-        except (OSError, ValueError, KeyError):
+        except OSError, ValueError, KeyError:
             self.mqtt.state(
                 "caption_error", "Offline caption track is missing or invalid"
             )
