@@ -123,6 +123,18 @@ sudo systemctl stop vsmp-motion-debug.service
 sudo systemctl start vsmp.service
 ```
 
+### Browse motion clips from the Mac
+
+Run this from the VSMP checkout on the Mac with the `vsmppi` SSH alias configured:
+
+```fish
+python3 utilities/browse_motion_clips.py
+```
+
+Choose a completed clip to play or download a 640-pixel-wide, 5 fps MP4 preview. Preview conversion runs on VSMPPi and reports progress and estimated time remaining. Downloads go to `~/Documents/VSMP Videos/`. The delete action asks for confirmation before permanently removing the selected original from the SSD. Any preview already saved to the Mac stays available.
+
+If both devices are on the fallback hotspot, pass the Pi's current hotspot IP with `--address`.
+
 ### Temporary preferred Wi-Fi
 
 The optional `vsmp-prefer-fallback-wifi.timer` uses the NetworkManager profiles already configured on VSMPPi. When `wlan0` is connected to `iot-wg` and two consecutive scans see `iot-wg-fallback`, it activates the `iot-wg-fallback` profile. A failed switch restores `iot-wg` and waits two minutes before trying again. When the temporary router disappears, NetworkManager reconnects using its saved profiles and priorities. A switch can briefly interrupt SSH.
