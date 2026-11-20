@@ -8,8 +8,10 @@ import re
 import subprocess  # noqa: S404
 import sys
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from ipaddress import ip_address
+from math import isfinite
 from pathlib import Path
 from shlex import quote
 from tempfile import NamedTemporaryFile
@@ -26,6 +28,8 @@ CHECK_STORAGE = (
 )
 MIN_TERMINAL_HEIGHT = 7
 MIN_TERMINAL_WIDTH = 38
+FULL_DATE_WIDTH = 47
+BYTES_PER_KB = 1000
 PREVIEW_DIR = Path.home() / "Documents" / "VSMP Videos"
 SSH_OPTIONS = (
     "BatchMode=yes",
@@ -39,19 +43,51 @@ SSH_OPTIONS = (
     "ClearAllForwardings=yes",
     "PermitLocalCommand=no",
 )
+PROBE_DURATION = (
+    "ffprobe -v error -show_entries format=duration "
+    "-of default=noprint_wrappers=1:nokey=1"
+)
 
 
-def _list_clips(ssh: list[str]) -> list[str]:
+@dataclass(frozen=True)
+class Clip:
+    """Metadata for a completed original on the Pi."""
+
+    name: str
+    size_bytes: int
+    duration_seconds: int | None
+
+
+def _list_clips(ssh: list[str]) -> list[Clip]:
+    command = (
+        CHECK_STORAGE
+        + f"""
+        for clip in ./motion-*.mkv; do
+            [ -f "$clip" ] && [ ! -L "$clip" ] || continue
+            size=$(stat -c %s -- "$clip") || continue
+            duration=$({PROBE_DURATION} "$clip" 2>/dev/null) || duration=
+            printf '%s\\0%s\\0%s\\0' "${{clip#./}}" "$size" "$duration"
+        done
+    """
+    )
     result = subprocess.run(  # noqa: S603
-        [*ssh, CHECK_STORAGE + r"""find . -maxdepth 1 -type f -printf '%f\n'"""],
-        check=True,
-        stdout=subprocess.PIPE,
-        text=True,
+        [*ssh, command], check=True, stdout=subprocess.PIPE, text=True
     )
-    return sorted(
-        (name for name in result.stdout.splitlines() if CLIP_NAME.fullmatch(name)),
-        reverse=True,
-    )
+    fields = iter(result.stdout.split("\0"))
+    clips = []
+    for name, size, duration in zip(fields, fields, fields, strict=False):
+        if not CLIP_NAME.fullmatch(name):
+            continue
+
+        seconds = float(duration) if duration not in {"", "N/A"} else None
+        rounded = (
+            round(seconds)
+            if seconds is not None and isfinite(seconds) and seconds >= 0
+            else None
+        )
+        clips.append(Clip(name, int(size), rounded))
+
+    return sorted(clips, key=lambda clip: clip.name, reverse=True)
 
 
 def _clip_command(name: str) -> str:
@@ -99,9 +135,7 @@ def _download(ssh: list[str], name: str) -> Path:
         return destination
 
     command = (
-        _clip_command(name)
-        + """{ duration=$(ffprobe -v error -show_entries format=duration """
-        """-of default=noprint_wrappers=1:nokey=1 "$clip"); """
+        _clip_command(name) + f'{{ duration=$({PROBE_DURATION} "$clip"); '
         r"""printf 'duration=%s\n' "$duration" >&2; """
         """exec ffmpeg -hide_banner -loglevel error -nostdin -nostats -progress pipe:2 """
         """-lowres 2 -i "$clip" -map 0:v:0 -vf fps=5,scale=640:-2 -an """
@@ -133,14 +167,36 @@ def _download(ssh: list[str], name: str) -> Path:
     return destination
 
 
-def _clip_time(name: str) -> str:
+def _clip_time(name: str) -> datetime:
     timestamp = name.removeprefix("motion-").removesuffix(".mkv")
-    started = datetime.strptime(timestamp, CLIP_TIMESTAMP).replace(tzinfo=UTC)
-    return started.astimezone().strftime("%d %b %Y %H:%M:%S %Z")
+    return datetime.strptime(timestamp, CLIP_TIMESTAMP).replace(tzinfo=UTC).astimezone()
+
+
+def _format_duration(seconds: int | None) -> str:
+    if seconds is None:
+        return "—"
+
+    hours, remaining = divmod(seconds, 3600)
+    minutes, remainder = divmod(remaining, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{remainder:02d}"
+
+    return f"{minutes}:{remainder:02d}"
+
+
+def _format_size(size_bytes: int) -> str:
+    amount = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if amount < BYTES_PER_KB:
+            return f"{size_bytes} B" if unit == "B" else f"{amount:.1f} {unit}"
+
+        amount /= BYTES_PER_KB
+
+    return f"{amount:.1f} TB"
 
 
 def _show_clips(
-    screen: curses.window, clips: list[str], selected: int, status: str
+    screen: curses.window, clips: list[Clip], selected: int, status: str
 ) -> bool:
     height, width = screen.getmaxyx()
     screen.erase()
@@ -154,14 +210,23 @@ def _show_clips(
     if not clips:
         screen.addnstr(2, 0, "No completed recordings on the SSD.", width - 1)
 
-    for row, name in enumerate(clips[first : first + visible_rows], start=2):
+    time_format, time_width = (
+        ("%Y-%m-%d %H:%M:%S", 19) if width >= FULL_DATE_WIDTH else ("%m-%d %H:%M", 11)
+    )
+    header = f"       {'Started':<{time_width}} {'Duration':>8} {'Size':>8}"
+    if clips:
+        screen.addnstr(1, 0, header, width - 1)
+
+    for row, clip in enumerate(clips[first : first + visible_rows], start=2):
         index = first + row - 2
         marker, style = (
             (">", curses.A_REVERSE) if index == selected else (" ", curses.A_NORMAL)
         )
-        screen.addnstr(
-            row, 0, f"{marker} {index + 1:>3}  {_clip_time(name)}", width - 1, style
-        )
+        started = _clip_time(clip.name).strftime(time_format)
+        duration = _format_duration(clip.duration_seconds)
+        size = _format_size(clip.size_bytes)
+        line = f"{marker} {index + 1:>3}  {started:<{time_width}} {duration:>8} {size:>8}"
+        screen.addnstr(row, 0, line, width - 1, style)
 
     screen.addnstr(height - 3, 0, status, width - 1)
     screen.addnstr(height - 2, 0, "↑↓ Select   Enter Play   d Download", width - 1)
@@ -178,7 +243,7 @@ def _confirm_delete(screen: curses.window) -> bool:
 
 
 def _select_clip(
-    screen: curses.window, clips: list[str], selected: int, status: str
+    screen: curses.window, clips: list[Clip], selected: int, status: str
 ) -> tuple[str, int]:
     with suppress(curses.error):
         curses.curs_set(0)
@@ -217,12 +282,14 @@ def _browse(ssh: list[str]) -> None:
                 case "quit":
                     return
                 case "refresh":
-                    current = clips[selected] if clips else None
+                    current = clips[selected].name if clips else None
                     clips = _list_clips(ssh)
-                    selected = clips.index(current) if current in clips else 0
+                    selected = next(
+                        (i for i, clip in enumerate(clips) if clip.name == current), 0
+                    )
                     status = "List refreshed."
                 case "delete":
-                    name = clips[selected]
+                    name = clips[selected].name
                     subprocess.run(  # noqa: S603
                         [*ssh, _clip_command(name) + 'rm -- "$clip"'], check=True
                     )
@@ -230,7 +297,7 @@ def _browse(ssh: list[str]) -> None:
                     selected = max(0, min(selected, len(clips) - 1))
                     status = f"Deleted {name} from the SSD."
                 case "play" | "download":
-                    path = _download(ssh, clips[selected])
+                    path = _download(ssh, clips[selected].name)
                     status = f"Saved to {path}"
                     if action == "play":
                         subprocess.run(["/usr/bin/open", str(path)], check=True)  # noqa: S603
