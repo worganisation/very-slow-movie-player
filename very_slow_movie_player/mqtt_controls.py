@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from json import dumps
-from ssl import CERT_REQUIRED
 from threading import Lock
 from typing import TYPE_CHECKING
 
 from dithering import DitheringMethod
-from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
-from paho.mqtt.enums import CallbackAPIVersion
+from mqtt_connection import mqtt_client
+from paho.mqtt.client import MQTT_ERR_SUCCESS
 from pydantic import ValidationError
 from settings import SETTINGS
 from utils.logging import logger
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 
     from controls import CommandMailbox
     from frame_light import FrameLight
-    from paho.mqtt.client import ConnectFlags, MQTTMessage
+    from paho.mqtt.client import Client, ConnectFlags, MQTTMessage
     from paho.mqtt.properties import Properties
     from paho.mqtt.reasoncodes import ReasonCode
 
@@ -76,21 +75,10 @@ class HAClient:
         self.root: str = f"{SETTINGS.mqtt_topic_prefix}/{SETTINGS.mqtt_device_id}"
         self.discovery: str = SETTINGS.mqtt_discovery_prefix
         self.device_id: str = SETTINGS.mqtt_device_id
-        self.client: Client = Client(
-            callback_api_version=CallbackAPIVersion.VERSION2,
-            client_id=f"vsmp-{self.device_id}",
-            reconnect_on_failure=True,
-        )
-        self.client.connect_timeout = 3.0
+        self.client: Client = mqtt_client(SETTINGS, f"vsmp-{self.device_id}")
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.will_set(f"{self.root}/availability", "offline", qos=1, retain=True)
-        if SETTINGS.mqtt_username is not None and SETTINGS.mqtt_password is not None:
-            self.client.username_pw_set(
-                SETTINGS.mqtt_username, SETTINGS.mqtt_password.get_secret_value()
-            )
-        if SETTINGS.mqtt_tls:
-            self.client.tls_set(cert_reqs=CERT_REQUIRED)  # pyright: ignore[reportUnknownMemberType]
         self._lock: Lock = Lock()
         self._stopping: bool = False
         self._states: dict[str, str] = {"import_youtube": "", "import_jellyfin": ""}
@@ -229,9 +217,19 @@ class HAClient:
                 availability_mode="all",
                 **common,
             )
+        self._entity(
+            "select",
+            "source",
+            "Source",
+            options=["local", "immich", "library", "camera", "Camera (Motion)"],
+            command_topic=f"{self.root}/command/source",
+            state_topic=f"{self.root}/state/source",
+            command_template="{{ 'camera_motion' if value == 'Camera (Motion)' else value }}",
+            value_template="{{ 'Camera (Motion)' if value == 'camera_motion' else value }}",
+            **common,
+        )
         for name, label, options in (
             ("dithering_method", "Dithering method", list(DitheringMethod)),
-            ("source", "Source", ["local", "immich", "library"]),
             ("media_type", "Immich media type", ["photos", "videos", "both"]),
             ("caption_style", "Caption style", ["margin", "overlay"]),
             ("caption_background", "Caption background", ["light", "dark"]),

@@ -26,7 +26,7 @@ With default MQTT settings, commands go to `vsmp/vsmp_pi/command/frame_light`, u
 
 ## Media source
 
-`VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
+`VSMP_SOURCE` selects `local` (the default), `immich`, `library`, `camera`, or `camera_motion`. Both the service and
 playlist command load the repository's private `.env` and validate **all**
 settings before playback, downloads, or GPIO startup. Populate the complete
 configuration before deploying, including a valid local video path, Immich
@@ -92,6 +92,74 @@ ignored, so stale copies cannot overwrite newer playback or control state.
 
 Set `VSMP_SOURCE=local` in the complete configuration above.
 
+### Raspberry Pi camera
+
+Select `camera` in the Home Assistant **Source** control or set `VSMP_SOURCE=camera` in the Pi's private `.env`. With the Camera Module 3 connected, install Raspberry Pi OS's `rpicam-apps` and verify that `rpicam-still --list-cameras` detects the module. VSMP also accepts `libcamera-still` on systems with the older command name. See the [Raspberry Pi camera setup guide](https://www.raspberrypi.com/documentation/accessories/camera-software.html).
+
+VSMP takes a still when the panel is ready, then takes a new still every five minutes while playback is enabled. The Photo refresh interval applies to Immich photos. **Next** requests a fresh capture and **Redisplay current frame** reuses the last displayed image. Both respect the three-minute panel dwell. A failed capture leaves the current frame visible, reports a source error, and retries after a minute.
+
+Select **Camera (Motion)** in Home Assistant or set `VSMP_SOURCE=camera_motion` to refresh only when the camera detects motion and at least five minutes have elapsed since the last panel refresh. Once the interval has elapsed, VSMP samples the scene about every five seconds and compares consecutive frames. The first sample establishes a baseline. A detected change displays the same snapshot, then restarts the five-minute wait. The panel keeps its current picture while the scene is still. **Redisplay current frame** remains available for manual rendering changes.
+
+Both camera sources save each displayed capture as a full-colour, timestamped JPEG in `very_slow_movie_player/.media/camera/` on the Pi. Filenames use UTC. Captures remain on disk until you remove them. Quiet motion-check samples and manual redisplays do not create archive files.
+
+### Motion video debug service
+
+The debug service watches at 640 × 360 and 5 fps and checks for motion once a second after a four-second settling period each time the monitor camera stream opens. On detection, it switches to full-sensor 4608 × 2592 colour MJPEG at up to 14.35 fps. The debug feed is rotated 180° at capture. Recording starts when the full-resolution stream is ready. Each clip ends after five minutes with no additional motion detection, and new detections extend the same clip.
+
+Run these commands on the Pi after checking out a version with the debug service:
+
+```fish
+just install-service
+sudo systemctl stop vsmp.service
+sudo systemctl start vsmp-motion-debug.service
+```
+
+Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The low-resolution monitor keeps only a motion reference in memory. Clips have no pre-roll. At 500 KB per frame and the target frame rate, allow about 26 GB per hour of recorded video. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
+
+After each clip is finalized, the recorder publishes its filename to `vsmp/vsmp_pi/event/motion_clip_saved` using the same MQTT settings as playback. The event is sent without retention and can trigger a Home Assistant notification.
+
+```fish
+sudo systemctl stop vsmp-motion-debug.service
+sudo systemctl start vsmp.service
+```
+
+### Browse motion clips from the Mac
+
+Run this from the VSMP checkout on the Mac with the `vsmppi` SSH alias configured:
+
+```fish
+python3 utilities/browse_motion_clips.py
+```
+
+The list shows each completed clip’s start time, duration, and original file size. Use the up and down arrows to select a clip. Press Enter to open its preview, `d` to download it, or `x` to delete the original with confirmation. Press `r` to refresh the list or `q` to quit. Previews are 640-pixel-wide, 5 fps MP4s. Preview conversion runs on VSMPPi and reports progress and estimated time remaining. Downloads go to `~/Documents/VSMP Videos/`. Any preview already saved to the Mac stays available.
+
+If both devices are on the fallback hotspot, pass the Pi's current hotspot IP with `--address`.
+
+### Temporary preferred Wi-Fi
+
+The optional `vsmp-prefer-fallback-wifi.timer` uses the NetworkManager profiles already configured on VSMPPi. When `wlan0` is connected to `iot-wg` and two consecutive scans see `iot-wg-fallback`, it activates the `iot-wg-fallback` profile. A failed switch restores `iot-wg` and waits two minutes before trying again. When the temporary router disappears, NetworkManager reconnects using its saved profiles and priorities. A switch can briefly interrupt SSH.
+
+Install and enable it from the VSMP checkout on the Pi:
+
+```fish
+sudo install -D -m 0755 utilities/prefer_fallback_wifi.sh /usr/local/libexec/vsmp-prefer-fallback-wifi
+sudo install -m 0644 service/vsmp-prefer-fallback-wifi.service service/vsmp-prefer-fallback-wifi.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now vsmp-prefer-fallback-wifi.timer
+```
+
+Remove the automatic switch and its installed files:
+
+```fish
+sudo systemctl disable --now vsmp-prefer-fallback-wifi.timer
+sudo systemctl stop vsmp-prefer-fallback-wifi.service
+sudo systemctl clean --what=runtime vsmp-prefer-fallback-wifi.service
+sudo rm -f /usr/local/libexec/vsmp-prefer-fallback-wifi /etc/systemd/system/vsmp-prefer-fallback-wifi.service /etc/systemd/system/vsmp-prefer-fallback-wifi.timer
+sudo systemctl daemon-reload
+```
+
+The saved Wi-Fi profiles remain available with their NetworkManager priorities. If the Pi is currently on the temporary router and needs to return to the main network immediately, run `sudo nmcli connection up id netplan-wlan0-iot-wg ifname wlan0` from a local console.
+
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,
@@ -131,8 +199,7 @@ Changing the method queues **Redisplay current frame**, even while paused, and
 never advances the video position. Multiple changes before a refresh coalesce
 into the latest choice. The three-minute panel dwell still applies. Caption
 text and its background are drawn after dithering and retain native resolution.
-The choice applies to local/library videos and Immich photos/videos; no method
-guarantees artifact-free output on every panel or scene.
+The choice applies to local/library videos, Immich photos/videos, and camera snapshots.
 
 Lighting requires the Raspberry Pi GPIO module; display playback additionally requires SPI. Hardware failures are reported rather than replaced with a software mock. For local development without hardware, set `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop, VSMP stops PWM and releases its GPIO resources, and attempts to sleep the display and release SPI. A display failure releases only display resources while MQTT lighting continues.
 
@@ -173,7 +240,7 @@ as an immutable album UUID. `IMMICH_MEDIA_TYPE` defaults to `both` and accepts
 the current physical image in place. Source changes wake a playback wait but
 cannot interrupt an active panel refresh. An edited gamma takes effect on the
 next frame; use **Redisplay current frame** to show it sooner. **Next** advances
-one video step or skips the displayed Immich asset, and **Restart current video**
+one video step, skips the displayed Immich asset, or requests a camera capture. **Restart current video**
 starts that video's frame position at zero. Both refresh interval controls have
 a three-minute minimum, which also applies to manual requests. Playback status,
 the displayed media filename without its extension, one-based current video

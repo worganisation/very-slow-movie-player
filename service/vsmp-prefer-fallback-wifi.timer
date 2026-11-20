@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for the temporary VSMP Wi-Fi router
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=15s
+AccuracySec=2s
+
+[Install]
+WantedBy=timers.target

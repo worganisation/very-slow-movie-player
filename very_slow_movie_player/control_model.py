@@ -37,7 +37,7 @@ BUTTON_NAMES = frozenset({"next", "redisplay", "restart_video"})
 class PlaybackControls(BaseModel):
     """Only non-secret settings exposed to Home Assistant."""
 
-    source: Literal["local", "immich", "library"]
+    source: Literal["local", "immich", "library", "camera", "camera_motion"]
     playback_enabled: bool
     video_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
     photo_interval: Annotated[float, Field(ge=180, le=86400, allow_inf_nan=False)]
