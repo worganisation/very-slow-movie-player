@@ -104,7 +104,7 @@ Both camera sources save each displayed capture as a full-colour, timestamped JP
 
 ### Motion video debug service
 
-The debug service watches at 640 × 360 and 5 fps and checks for motion once a second. On detection, it switches to full-sensor 4608 × 2592 colour MJPEG at up to 14.35 fps. The debug feed is rotated 180° at capture. Recording starts when the full-resolution stream is ready. Each clip ends after five minutes with no additional motion detection, and new detections extend the same clip.
+The debug service watches at 640 × 360 and 5 fps and checks for motion once a second after a four-second settling period each time the monitor camera stream opens. On detection, it switches to full-sensor 4608 × 2592 colour MJPEG at up to 14.35 fps. The debug feed is rotated 180° at capture. Recording starts when the full-resolution stream is ready. Each clip ends after five minutes with no additional motion detection, and new detections extend the same clip.
 
 Run these commands on the Pi after checking out a version with the debug service:
 

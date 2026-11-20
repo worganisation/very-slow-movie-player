@@ -35,6 +35,7 @@ MONITOR_WIDTH = 640
 MONITOR_HEIGHT = 360
 MONITOR_FPS = 5
 MONITOR_CHECK_SECONDS = 1
+MONITOR_SETTLE_SECONDS = 4
 QUIET_SECONDS = 300
 JPEG_END = b"\xff\xd9"
 LOGGER = getLogger(__name__)
@@ -150,13 +151,16 @@ class EventRecorder:
 
 
 def motion_frames(
-    frames: Iterable[bytes], check_seconds: float
+    frames: Iterable[bytes], check_seconds: float, *, settle_seconds: float = 0
 ) -> Iterator[tuple[bytes, float, bool]]:
-    """Pass through camera frames and compare samples at the requested interval."""
+    """Pass through frames and compare samples once the camera has settled."""
     previous: bytes | None = None
-    next_check = 0.0
+    next_check: float | None = None
     for frame in frames:
         timestamp = monotonic()
+        if next_check is None:
+            next_check = timestamp + settle_seconds
+
         moving = False
         if timestamp >= next_check:
             with Image.open(BytesIO(frame)) as image:
@@ -295,7 +299,9 @@ def capture_motion(camera: str, recorder: EventRecorder) -> None:
                     (
                         timestamp
                         for _, timestamp, moving in motion_frames(
-                            frames, MONITOR_CHECK_SECONDS
+                            frames,
+                            MONITOR_CHECK_SECONDS,
+                            settle_seconds=MONITOR_SETTLE_SECONDS,
                         )
                         if moving
                     ),

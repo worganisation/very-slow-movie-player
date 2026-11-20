@@ -13,7 +13,7 @@ from pathlib import Path
 from shutil import which
 from unittest.mock import patch
 
-from motion_debug import HEIGHT, WIDTH, EventRecorder, jpeg_frames
+from motion_debug import HEIGHT, WIDTH, EventRecorder, jpeg_frames, motion_frames
 from PIL import Image
 
 
@@ -29,6 +29,25 @@ class MotionDebugTests(unittest.TestCase):
         self.assertEqual(
             list(jpeg_frames([frame[:-1], frame[-1:] + frame])), [frame, frame]
         )
+
+    def test_monitor_detects_motion_after_camera_settles(self) -> None:
+        """Ignore the change during startup and detect it after establishing a baseline."""
+        with Image.new("L", (640, 360), 50) as image, BytesIO() as jpeg:
+            image.save(jpeg, format="JPEG")
+            still = jpeg.getvalue()
+
+        with Image.new("L", (640, 360), 50) as image, BytesIO() as jpeg:
+            image.paste(200, (0, 0, 160, 120))
+            image.save(jpeg, format="JPEG")
+            changed = jpeg.getvalue()
+
+        with patch("motion_debug.monotonic", side_effect=[10, 11, 13.9, 14, 15]):
+            frames = motion_frames(
+                [still, changed, changed, still, changed], 1, settle_seconds=4
+            )
+            triggers = [timestamp for _, timestamp, moving in frames if moving]
+
+        self.assertEqual(triggers, [15])
 
     def test_event_records_at_full_resolution_and_extends_until_quiet(self) -> None:
         """Probe a real saved clip and verify a second detection extends its deadline."""
