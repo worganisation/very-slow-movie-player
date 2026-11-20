@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import curses
 import re
 import subprocess  # noqa: S404
+import sys
+from contextlib import suppress
 from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
@@ -21,6 +24,8 @@ CHECK_STORAGE = (
     "then echo 'VSMPPi recording SSD is unavailable.' >&2; exit 1; fi; "
     f"cd {CLIP_DIR} || exit 1; "
 )
+MIN_TERMINAL_HEIGHT = 7
+MIN_TERMINAL_WIDTH = 38
 PREVIEW_DIR = Path.home() / "Documents" / "VSMP Videos"
 SSH_OPTIONS = (
     "BatchMode=yes",
@@ -128,65 +133,109 @@ def _download(ssh: list[str], name: str) -> Path:
     return destination
 
 
-def _show_clips(clips: list[str]) -> None:
-    print("\nCompleted recordings (newest first)")
-    if not clips:
-        print("No completed recordings on the SSD.")
-
-    for index, name in enumerate(clips, start=1):
-        timestamp = name.removeprefix("motion-").removesuffix(".mkv")
-        started = datetime.strptime(timestamp, CLIP_TIMESTAMP).replace(tzinfo=UTC)
-        local_time = started.astimezone().strftime("%d %b %Y %H:%M:%S %Z")
-        print(f"  {index:>3}  {local_time}")
+def _clip_time(name: str) -> str:
+    timestamp = name.removeprefix("motion-").removesuffix(".mkv")
+    started = datetime.strptime(timestamp, CLIP_TIMESTAMP).replace(tzinfo=UTC)
+    return started.astimezone().strftime("%d %b %Y %H:%M:%S %Z")
 
 
-def _delete(ssh: list[str], name: str) -> bool:
-    print(f"Permanently delete the original {name} from the SSD?")
-    if input("Type delete to confirm: ") != "delete":
+def _show_clips(
+    screen: curses.window, clips: list[str], selected: int, status: str
+) -> bool:
+    height, width = screen.getmaxyx()
+    screen.erase()
+    if height < MIN_TERMINAL_HEIGHT or width < MIN_TERMINAL_WIDTH:
+        screen.addnstr(0, 0, "Resize terminal (q quits)", width - 1)
         return False
 
-    subprocess.run([*ssh, _clip_command(name) + 'rm -- "$clip"'], check=True)  # noqa: S603
-    print(f"Deleted {name} from the SSD.")
+    visible_rows = height - 6
+    first = max(0, min(selected - visible_rows // 2, len(clips) - visible_rows))
+    screen.addnstr(0, 0, f"Completed recordings ({len(clips)})", width - 1, curses.A_BOLD)
+    if not clips:
+        screen.addnstr(2, 0, "No completed recordings on the SSD.", width - 1)
+
+    for row, name in enumerate(clips[first : first + visible_rows], start=2):
+        index = first + row - 2
+        marker, style = (
+            (">", curses.A_REVERSE) if index == selected else (" ", curses.A_NORMAL)
+        )
+        screen.addnstr(
+            row, 0, f"{marker} {index + 1:>3}  {_clip_time(name)}", width - 1, style
+        )
+
+    screen.addnstr(height - 3, 0, status, width - 1)
+    screen.addnstr(height - 2, 0, "↑↓ Select   Enter Play   d Download", width - 1)
+    screen.addnstr(height - 1, 0, "x Delete    r Refresh    q Quit", width - 1)
     return True
 
 
-def _act_on_clip(ssh: list[str], clips: list[str], action: str, number: str) -> None:
-    index = int(number) - 1
-    if not 0 <= index < len(clips):
-        print("Choose a clip number from the list.")
-        return
+def _confirm_delete(screen: curses.window) -> bool:
+    height, width = screen.getmaxyx()
+    screen.move(height - 1, 0)
+    screen.clrtoeol()
+    screen.addnstr(height - 1, 0, "Delete original from SSD? [y/N]", width - 1)
+    return screen.get_wch() == "y"
 
-    name = clips[index]
-    try:
-        if action == "x":
-            if _delete(ssh, name):
-                clips.pop(index)
-            return
 
-        path = _download(ssh, name)
-        print(f"Saved to {path}")
-        if action == "p":
-            subprocess.run(["/usr/bin/open", str(path)], check=True)  # noqa: S603
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"Could not complete the action: {error}")
+def _select_clip(
+    screen: curses.window, clips: list[str], selected: int, status: str
+) -> tuple[str, int]:
+    with suppress(curses.error):
+        curses.curs_set(0)
+
+    while True:
+        can_select = _show_clips(screen, clips, selected, status) and bool(clips)
+        match screen.get_wch():
+            case curses.KEY_UP if can_select:
+                selected = max(0, selected - 1)
+            case curses.KEY_DOWN if can_select:
+                selected = min(len(clips) - 1, selected + 1)
+            case "\n" | "\r" | curses.KEY_ENTER if can_select:
+                return "play", selected
+            case "d" if can_select:
+                return "download", selected
+            case "x" if can_select:
+                if _confirm_delete(screen):
+                    return "delete", selected
+
+                status = "Deletion cancelled."
+            case "r":
+                return "refresh", selected
+            case "q":
+                return "quit", selected
 
 
 def _browse(ssh: list[str]) -> None:
     clips = _list_clips(ssh)
+    selected = 0
+    status = ""
+
     while True:
-        _show_clips(clips)
-        choice = input(
-            "\nPlay [p 1], download [d 1], delete [x 1], refresh [r], quit [q]: "
-        )
-        match choice.lower().split():
-            case ["q"]:
-                return
-            case ["r"]:
-                clips = _list_clips(ssh)
-            case [action, number] if action in {"p", "d", "x"} and number.isdecimal():
-                _act_on_clip(ssh, clips, action, number)
-            case _:
-                print("Choose an action from the menu.")
+        action, selected = curses.wrapper(_select_clip, clips, selected, status)
+        try:
+            match action:
+                case "quit":
+                    return
+                case "refresh":
+                    current = clips[selected] if clips else None
+                    clips = _list_clips(ssh)
+                    selected = clips.index(current) if current in clips else 0
+                    status = "List refreshed."
+                case "delete":
+                    name = clips[selected]
+                    subprocess.run(  # noqa: S603
+                        [*ssh, _clip_command(name) + 'rm -- "$clip"'], check=True
+                    )
+                    clips.pop(selected)
+                    selected = max(0, min(selected, len(clips) - 1))
+                    status = f"Deleted {name} from the SSD."
+                case "play" | "download":
+                    path = _download(ssh, clips[selected])
+                    status = f"Saved to {path}"
+                    if action == "play":
+                        subprocess.run(["/usr/bin/open", str(path)], check=True)  # noqa: S603
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+            status = f"Could not complete the action: {error}"
 
 
 def main() -> None:
@@ -194,6 +243,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--address", type=ip_address, help="Override VSMPPi's IP address")
     args = parser.parse_args()
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        parser.error("Run the clip browser in an interactive terminal.")
 
     ssh = ["/usr/bin/ssh", "-T"]
     for option in SSH_OPTIONS:
@@ -204,7 +255,7 @@ def main() -> None:
 
     try:
         _browse([*ssh, "vsmppi"])
-    except (EOFError, KeyboardInterrupt):
+    except KeyboardInterrupt:
         print()
     except (OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Could not list recordings on VSMPPi: {error}\n")

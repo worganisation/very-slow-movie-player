@@ -131,7 +131,7 @@ Run this from the VSMP checkout on the Mac with the `vsmppi` SSH alias configure
 python3 utilities/browse_motion_clips.py
 ```
 
-Choose a completed clip to play or download a 640-pixel-wide, 5 fps MP4 preview. Preview conversion runs on VSMPPi and reports progress and estimated time remaining. Downloads go to `~/Documents/VSMP Videos/`. The delete action asks for confirmation before permanently removing the selected original from the SSD. Any preview already saved to the Mac stays available.
+Use the up and down arrows to select a completed clip. Press Enter to open its preview, `d` to download it, or `x` to delete the original with confirmation. Press `r` to refresh the list or `q` to quit. Previews are 640-pixel-wide, 5 fps MP4s. Preview conversion runs on VSMPPi and reports progress and estimated time remaining. Downloads go to `~/Documents/VSMP Videos/`. Any preview already saved to the Mac stays available.
 
 If both devices are on the fallback hotspot, pass the Pi's current hotspot IP with `--address`.
 
