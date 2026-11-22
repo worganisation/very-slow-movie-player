@@ -102,64 +102,6 @@ Select **Camera (Motion)** in Home Assistant or set `VSMP_SOURCE=camera_motion` 
 
 Both camera sources save each displayed capture as a full-colour, timestamped JPEG in `very_slow_movie_player/.media/camera/` on the Pi. Filenames use UTC. Captures remain on disk until you remove them. Quiet motion-check samples and manual redisplays do not create archive files.
 
-### Motion video debug service
-
-The debug service watches at 640 × 360 and 5 fps and checks for motion once a second after a four-second settling period each time the monitor camera stream opens. On detection, it switches to full-sensor 4608 × 2592 colour MJPEG at up to 14.35 fps. The debug feed is rotated 180° at capture. Recording starts when the full-resolution stream is ready. Each clip ends after five minutes with no additional motion detection, and new detections extend the same clip.
-
-Run these commands on the Pi after checking out a version with the debug service:
-
-```fish
-just install-service
-sudo systemctl stop vsmp.service
-sudo systemctl start vsmp-motion-debug.service
-```
-
-Completed clips are saved locally as MKV files under `/var/lib/vsmp-motion-debug/`. The low-resolution monitor keeps only a motion reference in memory. Clips have no pre-roll. At 500 KB per frame and the target frame rate, allow about 26 GB per hour of recorded video. Completed clips accumulate until you remove them. While a clip is being written it has a `.partial` extension. Stopping the debug service finalizes an open clip.
-
-After each clip is finalized, the recorder publishes its filename to `vsmp/vsmp_pi/event/motion_clip_saved` using the same MQTT settings as playback. The event is sent without retention and can trigger a Home Assistant notification.
-
-```fish
-sudo systemctl stop vsmp-motion-debug.service
-sudo systemctl start vsmp.service
-```
-
-### Browse motion clips from the Mac
-
-Run this from the VSMP checkout on the Mac with the `vsmppi` SSH alias configured:
-
-```fish
-python3 utilities/browse_motion_clips.py
-```
-
-The list shows each completed clip’s start time, duration, and original file size. Use the up and down arrows to select a clip. Press Enter to open its preview, `d` to download it, or `x` to delete the original with confirmation. Press `r` to refresh the list or `q` to quit. Previews are 640-pixel-wide, 5 fps MP4s. Preview conversion runs on VSMPPi and reports progress and estimated time remaining. Downloads go to `~/Documents/VSMP Videos/`. Any preview already saved to the Mac stays available.
-
-If both devices are on the fallback hotspot, pass the Pi's current hotspot IP with `--address`.
-
-### Temporary preferred Wi-Fi
-
-The optional `vsmp-prefer-fallback-wifi.timer` uses the NetworkManager profiles already configured on VSMPPi. When `wlan0` is connected to `iot-wg` and two consecutive scans see `iot-wg-fallback`, it activates the `iot-wg-fallback` profile. A failed switch restores `iot-wg` and waits two minutes before trying again. When the temporary router disappears, NetworkManager reconnects using its saved profiles and priorities. A switch can briefly interrupt SSH.
-
-Install and enable it from the VSMP checkout on the Pi:
-
-```fish
-sudo install -D -m 0755 utilities/prefer_fallback_wifi.sh /usr/local/libexec/vsmp-prefer-fallback-wifi
-sudo install -m 0644 service/vsmp-prefer-fallback-wifi.service service/vsmp-prefer-fallback-wifi.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now vsmp-prefer-fallback-wifi.timer
-```
-
-Remove the automatic switch and its installed files:
-
-```fish
-sudo systemctl disable --now vsmp-prefer-fallback-wifi.timer
-sudo systemctl stop vsmp-prefer-fallback-wifi.service
-sudo systemctl clean --what=runtime vsmp-prefer-fallback-wifi.service
-sudo rm -f /usr/local/libexec/vsmp-prefer-fallback-wifi /etc/systemd/system/vsmp-prefer-fallback-wifi.service /etc/systemd/system/vsmp-prefer-fallback-wifi.timer
-sudo systemctl daemon-reload
-```
-
-The saved Wi-Fi profiles remain available with their NetworkManager priorities. If the Pi is currently on the temporary router and needs to return to the main network immediately, run `sudo nmcli connection up id netplan-wlan0-iot-wg ifname wlan0` from a local console.
-
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,

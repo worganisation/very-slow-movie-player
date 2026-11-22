@@ -28,7 +28,7 @@ install-python: sync
 
 # Install the systemd unit without starting the service
 install-service:
-    sudo cp service/vsmp.service service/vsmp-motion-debug.service /etc/systemd/system/
+    sudo cp service/vsmp.service /etc/systemd/system/
     sudo systemctl daemon-reload
 
 install-all: install-python install-service

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from json import dumps
+from ssl import CERT_REQUIRED
 from threading import Lock
 from typing import TYPE_CHECKING
 
 from dithering import DitheringMethod
-from mqtt_connection import mqtt_client
-from paho.mqtt.client import MQTT_ERR_SUCCESS
+from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
+from paho.mqtt.enums import CallbackAPIVersion
 from pydantic import ValidationError
 from settings import SETTINGS
 from utils.logging import logger
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
     from controls import CommandMailbox
     from frame_light import FrameLight
-    from paho.mqtt.client import Client, ConnectFlags, MQTTMessage
+    from paho.mqtt.client import ConnectFlags, MQTTMessage
     from paho.mqtt.properties import Properties
     from paho.mqtt.reasoncodes import ReasonCode
 
@@ -75,10 +76,21 @@ class HAClient:
         self.root: str = f"{SETTINGS.mqtt_topic_prefix}/{SETTINGS.mqtt_device_id}"
         self.discovery: str = SETTINGS.mqtt_discovery_prefix
         self.device_id: str = SETTINGS.mqtt_device_id
-        self.client: Client = mqtt_client(SETTINGS, f"vsmp-{self.device_id}")
+        self.client: Client = Client(
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            client_id=f"vsmp-{self.device_id}",
+            reconnect_on_failure=True,
+        )
+        self.client.connect_timeout = 3.0
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.will_set(f"{self.root}/availability", "offline", qos=1, retain=True)
+        if SETTINGS.mqtt_username is not None and SETTINGS.mqtt_password is not None:
+            self.client.username_pw_set(
+                SETTINGS.mqtt_username, SETTINGS.mqtt_password.get_secret_value()
+            )
+        if SETTINGS.mqtt_tls:
+            self.client.tls_set(cert_reqs=CERT_REQUIRED)  # pyright: ignore[reportUnknownMemberType]
         self._lock: Lock = Lock()
         self._stopping: bool = False
         self._states: dict[str, str] = {"import_youtube": "", "import_jellyfin": ""}
