@@ -12,11 +12,14 @@ labels:
 
   - label: dependencies
     files:
+      - ^Pipfile\.lock$
       - ^uv\.lock$
+      - ^requirements\.txt$
 
   - label: dependencies
     authors:
       - dependabot[bot]
+      - pre-commit-ci[bot]
 
   - label: documentation
     files:
