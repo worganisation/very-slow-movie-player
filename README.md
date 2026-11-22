@@ -26,7 +26,7 @@ With default MQTT settings, commands go to `vsmp/vsmp_pi/command/frame_light`, u
 
 ## Media source
 
-`VSMP_SOURCE` selects `local` (the default) or `immich`. Both the service and
+`VSMP_SOURCE` selects `local` (the default), `immich`, `library`, `camera`, or `camera_motion`. Both the service and
 playlist command load the repository's private `.env` and validate **all**
 settings before playback, downloads, or GPIO startup. Populate the complete
 configuration before deploying, including a valid local video path, Immich
@@ -92,6 +92,16 @@ ignored, so stale copies cannot overwrite newer playback or control state.
 
 Set `VSMP_SOURCE=local` in the complete configuration above.
 
+### Raspberry Pi camera
+
+Select `camera` in the Home Assistant **Source** control or set `VSMP_SOURCE=camera` in the Pi's private `.env`. With the Camera Module 3 connected, install Raspberry Pi OS's `rpicam-apps` and verify that `rpicam-still --list-cameras` detects the module. VSMP also accepts `libcamera-still` on systems with the older command name. See the [Raspberry Pi camera setup guide](https://www.raspberrypi.com/documentation/accessories/camera-software.html).
+
+VSMP takes a still when the panel is ready, then takes a new still every five minutes while playback is enabled. The Photo refresh interval applies to Immich photos. **Next** requests a fresh capture and **Redisplay current frame** reuses the last displayed image. Both respect the three-minute panel dwell. A failed capture leaves the current frame visible, reports a source error, and retries after a minute.
+
+Select **Camera (Motion)** in Home Assistant or set `VSMP_SOURCE=camera_motion` to refresh only when the camera detects motion and at least five minutes have elapsed since the last panel refresh. Once the interval has elapsed, VSMP samples the scene about every five seconds and compares consecutive frames. The first sample establishes a baseline. A detected change displays the same snapshot, then restarts the five-minute wait. The panel keeps its current picture while the scene is still. **Redisplay current frame** remains available for manual rendering changes.
+
+Both camera sources save each displayed capture as a full-colour, timestamped JPEG in `very_slow_movie_player/.media/camera/` on the Pi. Filenames use UTC. Captures remain on disk until you remove them. Quiet motion-check samples and manual redisplays do not create archive files.
+
 ### Immich album
 
 Create an Immich API key with album read, asset read, asset view, and asset download access,
@@ -131,8 +141,7 @@ Changing the method queues **Redisplay current frame**, even while paused, and
 never advances the video position. Multiple changes before a refresh coalesce
 into the latest choice. The three-minute panel dwell still applies. Caption
 text and its background are drawn after dithering and retain native resolution.
-The choice applies to local/library videos and Immich photos/videos; no method
-guarantees artifact-free output on every panel or scene.
+The choice applies to local/library videos, Immich photos/videos, and camera snapshots.
 
 Lighting requires the Raspberry Pi GPIO module; display playback additionally requires SPI. Hardware failures are reported rather than replaced with a software mock. For local development without hardware, set `VSMP_ALLOW_MOCK_HARDWARE=true` explicitly. On service stop, VSMP stops PWM and releases its GPIO resources, and attempts to sleep the display and release SPI. A display failure releases only display resources while MQTT lighting continues.
 
@@ -173,7 +182,7 @@ as an immutable album UUID. `IMMICH_MEDIA_TYPE` defaults to `both` and accepts
 the current physical image in place. Source changes wake a playback wait but
 cannot interrupt an active panel refresh. An edited gamma takes effect on the
 next frame; use **Redisplay current frame** to show it sooner. **Next** advances
-one video step or skips the displayed Immich asset, and **Restart current video**
+one video step, skips the displayed Immich asset, or requests a camera capture. **Restart current video**
 starts that video's frame position at zero. Both refresh interval controls have
 a three-minute minimum, which also applies to manual requests. Playback status,
 the displayed media filename without its extension, one-based current video
