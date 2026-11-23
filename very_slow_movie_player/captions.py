@@ -317,7 +317,7 @@ def transcribe_media(
             record = TypeAdapter(dict[str, object]).validate_json(cache_path.read_bytes())
             if record.get("identity") == identity:
                 return CaptionTrack.model_validate(record["track"])
-        except (ValidationError, KeyError, OSError):
+        except ValidationError, KeyError, OSError:
             pass
     track = _transcribe_local(media_path, model_name=model_name, language=language)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
