@@ -100,6 +100,7 @@ hooks = [
       "yt-dlp[default]==2026.8.19",
       "Pillow==12.3.0",
       "httpx2==2.13.1",
+      "opentelemetry-exporter-otlp-proto-http==1.45.2",
       "types-RPi.GPIO",
       "ffmpeg-python==0.2.0"
     ]

@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from PIL import Image
+from tracing import stage
 
 
 class DitheringMethod(StrEnum):
@@ -48,6 +49,7 @@ def _ordered(image: Image.Image) -> Image.Image:
         return result.convert("1", dither=Image.Dither.NONE)
 
 
+@stage("vsmp.image.dither")
 def dither_image(
     image: Image.Image,
     method: DitheringMethod = DitheringMethod.FLOYD_STEINBERG,

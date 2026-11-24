@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     immich_api_key: SecretStr
     immich_album_id: UUID
     yt_playlist_id: Annotated[str, Field(min_length=1)]
+    otel_exporter_otlp_traces_endpoint: AnyHttpUrl | None = None
     mqtt_host: Annotated[str, Field(min_length=1)]
     mqtt_port: Annotated[int, Field(ge=1, le=65535)] = 1883
     mqtt_tls: bool = False

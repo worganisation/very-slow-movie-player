@@ -47,6 +47,48 @@ class PlaybackLibraryTests(unittest.TestCase):
         with patch.object(settings.SETTINGS, "vsmp_video_path", video):
             self.defaults = self.controls.PlaybackControls.defaults()
 
+    def test_immich_photo_trace_links_fetch_and_identifies_panel_failures(self) -> None:
+        """Preserve the fetch link and failing hardware stage across a refresh."""
+        import tracing
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+        from opentelemetry.trace import StatusCode
+
+        provider = TracerProvider()
+        self.addCleanup(provider.shutdown)
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        runtime = Mock()
+        runtime.controls = self.defaults.model_copy(update={"source": "immich"})
+        runtime.wait_ready.return_value = True
+        album = Mock()
+        image = self.root / "photo.jpg"
+        with Image.new("RGB", (16, 16)) as photo:
+            photo.save(image)
+        album.download.return_value = image
+
+        with (
+            patch.object(tracing, "TRACER", provider.get_tracer("vsmp.test")),
+            patch.object(self.main.DISPLAY, "display", side_effect=OSError("SPI")),
+            self.assertRaises(self.main.PanelRefreshError),
+        ):
+            self.main.play_immich_asset(
+                runtime, album, SimpleNamespace(kind="IMAGE", filename=image.name)
+            )
+
+        spans = {span.name: span for span in exporter.get_finished_spans()}
+        refresh = spans["vsmp.frame.refresh"]
+        self.assertEqual(refresh.links[0].context, spans["vsmp.media.fetch"].context)
+        self.assertEqual(refresh.status.status_code, StatusCode.ERROR)
+        panel = spans["vsmp.panel.refresh"]
+        self.assertEqual(panel.attributes["error.type"], "OSError")
+        for name in ("vsmp.image.format", "vsmp.image.dither", "vsmp.panel.refresh"):
+            self.assertEqual(spans[name].parent, refresh.context)
+
     def test_spi_failure_does_not_prevent_light_startup(self) -> None:
         """Creating the shared GPIO owner does not open the display SPI device."""
         from frame_light import FrameLight
