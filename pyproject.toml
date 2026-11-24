@@ -11,7 +11,7 @@ dependencies = [
   "pillow>=13,<14",
   "spidev>=3.8,<4; sys_platform == 'linux'",
   "ffmpeg-python>=0.2.0,<0.3",
-  "loguru>=0.7.3,<0.8",
+  "loguru>=0.8,<0.9",
   "pydantic>=2.13.5,<3",
   "pydantic-settings>=2.15.0,<3",
   "paho-mqtt>=2.1.0,<3",
