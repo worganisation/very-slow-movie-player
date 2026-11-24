@@ -257,6 +257,12 @@ If they were installed on a Pi, check the `worgarside` user's `crontab -l` and
 remove the entry for `utilities/dep_updater/dep_updater.sh` with `crontab -e`.
 The release deployment workflow installs locked dependencies with uv.
 
+## Frame tracing
+
+Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://10.0.0.110:4318/v1/traces` in the Pi's service `.env` to export traces to the homelab Alloy receiver. Apply the [Tempo infrastructure](https://github.com/worganisation/infrastructure/blob/main/docs/observability.md) before enabling export. Playback uses a background exporter with a bounded queue. Leaving the endpoint unset disables export.
+
+In Grafana Explore, select **Application traces** and query `{ resource.service.name = "vsmp" && name = "vsmp.frame.refresh" }`. Each refresh starts when the scheduler lets the panel update. Expand its spans for extraction, formatting, dithering, optional caption rendering, panel I/O and state reporting. Filter on `span.vsmp.trigger` for playback or redisplay. Immich playback traces link to the preceding media fetch, which can serve many frames from one video. The refresh duration excludes prefetch and panel dwell. Failed operations carry the exception type.
+
 ## Release deployment
 
 Prepare the next version through a reviewed PR before running **Semantic Release**: update `project.version` in `pyproject.toml`, `very_slow_movie_player/__init__.py` and the root package version in `uv.lock`. The workflow checks that the committed version matches Semantic Release's expected version, then publishes the release tag without pushing a version commit to protected `main`. Release notes are published on GitHub; the locked runtime dependencies are installed during deployment.

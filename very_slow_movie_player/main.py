@@ -30,6 +30,7 @@ from mqtt_controls import HAClient
 from PIL import Image, ImageOps
 from PIL.Image import Resampling
 from settings import SETTINGS
+from tracing import configure_tracing, frame_refresh, stage
 from utils import EPaperDisplay, const
 from utils.logging import logger
 from utils.progress import get_progress, load_progress, set_progress
@@ -39,6 +40,8 @@ from ffmpeg import probe
 
 if TYPE_CHECKING:
     from types import FrameType
+
+    from opentelemetry.trace import SpanContext
 
     from ffmpeg import ProbeInfo, ProbeStream
 
@@ -50,6 +53,7 @@ class PanelRefreshError(Exception):
 
 
 @logger.catch(reraise=True)
+@stage("vsmp.frame.extract")
 def extract_frame(
     video_path: Path,
     frame: int,
@@ -132,6 +136,7 @@ def extract_frame(
 
 
 @logger.catch(reraise=True)
+@stage("vsmp.image.format")
 def format_image(image_path: Path, frame_output_path: Path = const.FRAME_PATH) -> Path:
     """Formats an image for displaying on the EPD.
 
@@ -212,23 +217,25 @@ def display_image(
         displayed_caption = ""
         if controls is not None and caption:
             try:
-                rendered = render_caption(
-                    darkened,
-                    caption,
-                    style=controls.caption_style,
-                    background=controls.caption_background,
-                    font=controls.caption_font,
-                    font_size=controls.caption_font_size,
-                    dithering_method=controls.dithering_method,
-                )
+                with stage("vsmp.caption.render"):
+                    rendered = render_caption(
+                        darkened,
+                        caption,
+                        style=controls.caption_style,
+                        background=controls.caption_background,
+                        font=controls.caption_font,
+                        font_size=controls.caption_font_size,
+                        dithering_method=controls.dithering_method,
+                    )
             except (ValueError, RuntimeError) as exc:
                 mqtt.state("caption_error", str(exc)[:255])
             else:
                 displayed_caption = caption
                 mqtt.state("caption_error", "none")
         try:
-            buffer = DISPLAY.getbuffer(rendered)
-            DISPLAY.display(buffer)
+            with stage("vsmp.panel.refresh"):
+                buffer = DISPLAY.getbuffer(rendered)
+                DISPLAY.display(buffer)
         except Exception as exc:
             raise PanelRefreshError("Panel refresh failed") from exc
         mqtt.state("current_caption", displayed_caption)
@@ -473,6 +480,7 @@ class PlaybackRuntime:
             if candidate.album not in {row.id for row in album.albums()}:
                 raise ValueError("Immich album is not accessible")
 
+    @stage("vsmp.frame.report")
     def mark_displayed(
         self,
         path: Path,
@@ -554,29 +562,34 @@ class PlaybackRuntime:
         ):
             return False
         self.buttons.discard("redisplay")
-        image_path = self.current_path
-        caption = ""
-        if self.current_video is not None:
-            source, frame, fps, stream_index, start_time = self.current_video
-            image_path = extract_frame(
-                source, frame, fps=fps, stream_index=stream_index, start_time=start_time
+        with frame_refresh(self.controls.source, self.current_kind, "redisplay"):
+            image_path = self.current_path
+            caption = ""
+            if self.current_video is not None:
+                source, frame, fps, stream_index, start_time = self.current_video
+                image_path = extract_frame(
+                    source,
+                    frame,
+                    fps=fps,
+                    stream_index=stream_index,
+                    start_time=start_time,
+                )
+                caption = self.caption_text(frame / fps)
+            display_image(
+                image_path,
+                self.controls.gamma,
+                self.mqtt,
+                caption=caption,
+                controls=self.controls,
             )
-            caption = self.caption_text(frame / fps)
-        display_image(
-            image_path,
-            self.controls.gamma,
-            self.mqtt,
-            caption=caption,
-            controls=self.controls,
-        )
-        self.mark_displayed(
-            image_path,
-            self.current_media,
-            self.current_frame,
-            self.current_frame_count,
-            kind=self.current_kind,
-            video_frame=self.current_video,
-        )
+            self.mark_displayed(
+                image_path,
+                self.current_media,
+                self.current_frame,
+                self.current_frame_count,
+                kind=self.current_kind,
+                video_frame=self.current_video,
+            )
         return True
 
     def caption_text(self, timestamp: float) -> str:
@@ -612,8 +625,17 @@ def play_video(
     *,
     immich: bool = False,
     media_label: str | None = None,
+    fetch: SpanContext | None = None,
 ) -> None:
-    """Advance a video with settings and actions applied between panel updates."""
+    """Advance a video with settings and actions applied between panel updates.
+
+    Args:
+        runtime: Current controls and panel scheduler.
+        video_path: Local video file to decode.
+        immich: Advance to the next asset on a skip.
+        media_label: Display label for MQTT.
+        fetch: Trace context for the shared Immich asset download.
+    """
     frame_count, fps, stream_index, start_time = video_metadata(video_path)
     if runtime.controls.always_restart_videos:
         set_progress(video_path, 0, frame_count)
@@ -636,24 +658,32 @@ def play_video(
         elif frame >= frame_count:
             set_progress(video_path, frame_count, frame_count)
             return
-        output = extract_frame(
-            video_path, frame, fps=fps, stream_index=stream_index, start_time=start_time
-        )
-        display_image(
-            output,
-            runtime.controls.gamma,
-            runtime.mqtt,
-            caption=runtime.caption_text(frame / fps),
-            controls=runtime.controls,
-        )
-        runtime.mark_displayed(
-            output,
-            media_label or str(video_path),
-            frame + 1,
-            frame_count,
-            video_frame=(video_path, frame, fps, stream_index, start_time),
-        )
-        set_progress(video_path, frame, frame_count)
+        with frame_refresh(
+            runtime.controls.source, "video", "playback", fetch=fetch
+        ) as span:
+            span.set_attribute("vsmp.frame.index", frame)
+            output = extract_frame(
+                video_path,
+                frame,
+                fps=fps,
+                stream_index=stream_index,
+                start_time=start_time,
+            )
+            display_image(
+                output,
+                runtime.controls.gamma,
+                runtime.mqtt,
+                caption=runtime.caption_text(frame / fps),
+                controls=runtime.controls,
+            )
+            runtime.mark_displayed(
+                output,
+                media_label or str(video_path),
+                frame + 1,
+                frame_count,
+                video_frame=(video_path, frame, fps, stream_index, start_time),
+            )
+            set_progress(video_path, frame, frame_count)
         frame += runtime.controls.frame_advance
 
 
@@ -663,15 +693,21 @@ def play_immich_asset(runtime: PlaybackRuntime, album: ImmichAlbum, asset: Asset
         return
     if runtime.controls.media_type == "videos" and asset.kind != "VIDEO":
         return
-    media = album.download(asset)
+    with stage("vsmp.media.fetch") as span:
+        media = album.download(asset)
+        fetch = span.get_span_context()
+
     media_label = asset.filename
     if asset.kind == "VIDEO":
-        play_video(runtime, media, immich=True, media_label=media_label)
+        play_video(runtime, media, immich=True, media_label=media_label, fetch=fetch)
         return
     if not runtime.wait_ready(runtime.selection):
         return
-    display_image(media, runtime.controls.gamma, runtime.mqtt, controls=runtime.controls)
-    runtime.mark_displayed(media, media_label, kind="photo")
+    with frame_refresh(runtime.controls.source, "photo", "playback", fetch=fetch):
+        display_image(
+            media, runtime.controls.gamma, runtime.mqtt, controls=runtime.controls
+        )
+        runtime.mark_displayed(media, media_label, kind="photo")
     if runtime.wait_ready(runtime.selection):
         runtime.buttons.discard("next")
 
@@ -825,6 +861,9 @@ def run_display(runtime: PlaybackRuntime) -> None:
 @logger.catch(reraise=True)
 def main() -> None:
     """Run a single hardware owner with a persistent, asynchronous MQTT client."""
+    if endpoint := SETTINGS.otel_exporter_otlp_traces_endpoint:
+        configure_tracing(str(endpoint))
+
     runtime = PlaybackRuntime()
     _ = load_progress()
     previous_sigterm_handler = signal(SIGTERM, stop_on_sigterm)
