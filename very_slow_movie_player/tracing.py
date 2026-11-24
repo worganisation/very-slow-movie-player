@@ -13,7 +13,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Generator, Mapping, Sequence
     from contextlib import AbstractContextManager
 
 TRACER = trace.get_tracer("vsmp.playback")
@@ -38,7 +38,7 @@ def stage(
     attributes: Mapping[str, str | int] | None = None,
     context: Context | None = None,
     links: Sequence[trace.Link] = (),
-) -> Iterator[trace.Span]:
+) -> Generator[trace.Span]:
     """Time a playback operation and mark failures without exporting media details.
 
     Args:
