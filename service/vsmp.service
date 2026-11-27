@@ -9,6 +9,7 @@ Type=simple
 Restart=always
 RestartSec=5
 User=worgarside
+Environment=OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://10.0.0.110:4318/v1/traces
 EnvironmentFile=/home/worgarside/very-slow-movie-player/.env
 ExecStart=/home/worgarside/very-slow-movie-player/.venv/bin/python /home/worgarside/very-slow-movie-player/very_slow_movie_player/main.py
 WorkingDirectory=/home/worgarside/very-slow-movie-player

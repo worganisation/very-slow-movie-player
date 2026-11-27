@@ -259,7 +259,9 @@ The release deployment workflow installs locked dependencies with uv.
 
 ## Frame tracing
 
-Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://10.0.0.110:4318/v1/traces` in the Pi's service `.env` to export traces to the homelab Alloy receiver. Apply the [Tempo infrastructure](https://github.com/worganisation/infrastructure/blob/main/docs/observability.md) before enabling export. Playback uses a background exporter with a bounded queue. Leaving the endpoint unset disables export.
+The installed `vsmp.service` sends playback traces to Alloy at `http://10.0.0.110:4318/v1/traces` using a bounded background exporter. The Pi’s `.env` can override `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` with a different receiver URL. To disable export, remove any endpoint from `.env` and set `UnsetEnvironment=OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in a `[Service]` drop-in. Development runs require an explicit endpoint to enable export. [Private collector and routing](https://github.com/worganisation/infrastructure/blob/main/docs/observability.md#local-application-traces)
+
+The release workflow restarts the installed unit. To enroll an existing Pi, install the reviewed tag’s unit with `just install-service` on the Pi, then restart `vsmp.service` during the release window. An existing unit that reads the checkout’s `.env` can instead take the endpoint from that file on its next start.
 
 In Grafana Explore, select **Application traces** and query `{ resource.service.name = "vsmp" && name = "vsmp.frame.refresh" }`. Each refresh starts when the scheduler lets the panel update. Expand its spans for extraction, formatting, dithering, optional caption rendering, panel I/O and state reporting. Filter on `span.vsmp.trigger` for playback or redisplay. Immich playback traces link to the preceding media fetch, which can serve many frames from one video. The refresh duration excludes prefetch and panel dwell. Failed operations carry the exception type.
 
